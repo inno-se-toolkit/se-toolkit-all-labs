@@ -1,0 +1,27 @@
+[submodule "lab-01-market-product-and-git"]
+	path = lab-01-market-product-and-git
+	url = https://github.com/nurlingo/lab-01-market-product-and-git
+[submodule "lab-02-fix-and-deploy-backend"]
+	path = lab-02-fix-and-deploy-backend
+	url = https://github.com/nurlingo/lab-02-fix-and-deploy-backend
+[submodule "lab-03-restful-backend-and-testing"]
+	path = lab-03-restful-backend-and-testing
+	url = https://github.com/nurlingo/lab-03-restful-backend-and-testing
+[submodule "lab-04-db-and-containerization"]
+	path = lab-04-db-and-containerization
+	url = https://github.com/nurlingo/lab-04-db-and-containerization
+[submodule "lab-06-telegram-bot"]
+	path = lab-06-telegram-bot
+	url = https://github.com/nurlingo/lab-06-telegram-bot
+[submodule "lab-07-data-and-web"]
+	path = lab-07-data-and-web
+	url = https://github.com/nurlingo/lab-07-data-and-web
+[submodule "lab-08-ml-recommender"]
+	path = lab-08-ml-recommender
+	url = https://github.com/nurlingo/lab-08-ml-recommender
+[submodule "lab-09-flutter-app"]
+	path = lab-09-flutter-app
+	url = https://github.com/nurlingo/lab-09-flutter-app
+[submodule "lab-10-hackathon"]
+	path = lab-10-hackathon
+	url = https://github.com/nurlingo/lab-10-hackathon
