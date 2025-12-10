@@ -25,3 +25,6 @@
 [submodule "lab-10-hackathon"]
 	path = lab-10-hackathon
 	url = https://github.com/nurlingo/lab-10-hackathon
+[submodule "lab-05-ai-integration"]
+	path = lab-05-ai-integration
+	url = https://github.com/nurlingo/lab-05-ai-integration
