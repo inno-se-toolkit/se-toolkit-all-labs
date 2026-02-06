@@ -29,3 +29,9 @@
 [submodule "lab-05-ai-integration"]
 	path = lab-05-ai-integration
 	url = https://github.com/nurlingo/lab-05-ai-integration
+[submodule "tg_bot_autochecker"]
+	path = tg_bot_autochecker
+	url = git@github.com:inno-se-toolkit/tg_bot_autochecker.git
+[submodule "autochecker"]
+	path = autochecker
+	url = https://github.com/inno-se-toolkit/autochecker
