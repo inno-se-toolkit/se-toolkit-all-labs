@@ -1,10 +1,10 @@
 [submodule "lab-01-market-product-and-git"]
 	path = lab-01-market-product-and-git
-	url = https://github.com/inno-pre-swp/lab-01-market-product-and-git
+	url = https://github.com/inno-se-toolkit/lab-01-market-product-and-git
 	branch = improve-lab
 [submodule "lab-02-fix-and-deploy-backend"]
 	path = lab-02-fix-and-deploy-backend
-	url = https://github.com/inno-pre-swp/lab-02-fix-and-deploy-backend
+	url = https://github.com/inno-se-toolkit/lab-02-fix-and-deploy-backend
 [submodule "lab-03-restful-backend-and-testing"]
 	path = lab-03-restful-backend-and-testing
 	url = https://github.com/nurlingo/lab-03-restful-backend-and-testing
