@@ -2,9 +2,6 @@
 	path = lab-01-market-product-and-git
 	url = https://github.com/inno-se-toolkit/lab-01-market-product-and-git
 	branch = improve-lab
-[submodule "lab-02-fix-and-deploy-backend"]
-	path = lab-02-fix-and-deploy-backend
-	url = https://github.com/inno-se-toolkit/lab-02-fix-and-deploy-backend
 [submodule "lab-03-restful-backend-and-testing"]
 	path = lab-03-restful-backend-and-testing
 	url = https://github.com/nurlingo/lab-03-restful-backend-and-testing
@@ -32,3 +29,6 @@
 [submodule "autochecker"]
 	path = autochecker
 	url = https://github.com/inno-se-toolkit/autochecker.git
+[submodule "se-toolkit-lab-2"]
+	path = se-toolkit-lab-2
+	url = git@github.com:inno-se-toolkit/se-toolkit-lab-2.git
