@@ -32,3 +32,6 @@
 [submodule "se-toolkit-lab-2"]
 	path = se-toolkit-lab-2
 	url = git@github.com:inno-se-toolkit/se-toolkit-lab-2.git
+[submodule "se-toolkit-lab-3"]
+	path = se-toolkit-lab-3
+	url = git@github.com:inno-se-toolkit/se-toolkit-lab-3.git
