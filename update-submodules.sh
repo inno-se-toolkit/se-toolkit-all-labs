@@ -19,7 +19,7 @@ echo "Updated submodules:"
 echo "$CHANGED"
 echo ""
 
-git add -A
+git add .gitmodules $CHANGED
 git commit -m "chore: update submodules"
 git push origin main
 
