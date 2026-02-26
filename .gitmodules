@@ -1,7 +1,7 @@
 [submodule "lab-01-market-product-and-git"]
 	path = lab-01-market-product-and-git
 	url = https://github.com/inno-se-toolkit/lab-01-market-product-and-git
-	branch = improve-lab
+	branch = main
 [submodule "lab-06-telegram-bot"]
 	path = lab-06-telegram-bot
 	url = https://github.com/nurlingo/lab-06-telegram-bot
