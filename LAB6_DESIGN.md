@@ -1,6 +1,6 @@
 # Lab 06 — Build Your Own Agent: Design Document
 
-> **Status:** Tasks 1-2 written, Task 3 pending. Autochecker spec + question bank pending.
+> **Status:** All 3 tasks written. Question bank (v2) created. Eval API endpoint deployed. `run_eval.py` shipped. Autochecker spec pending.
 
 ## 1. Lab Vision
 
@@ -339,81 +339,52 @@ should appear for questions that require them.
 
 ## 9. Evaluation Design
 
+> **Note:** This section provides the conceptual overview. Section 13 has
+> the full implementation details (API endpoint, matching strategies, bot eval).
+
 ### 9.1 How evaluation works
 
-The autochecker SSHes into the student's VM and runs their agent CLI with
-each question from the eval set. It captures stdout, parses the JSON, and
-evaluates:
+Two paths: local iteration (`run_eval.py`) and grading (autochecker SSH).
 
-1. **Answer correctness** — does the answer contain/match the expected value?
-2. **Tool usage** — for questions that require tools, were the right tools called?
+**Local iteration:** Students run `python run_eval.py` which fetches questions
+one at a time from the autochecker API, runs their agent locally, and checks
+the answer. Stops at the first failure — students fix that question and re-run.
 
-```
-autochecker                     student VM
-    │                               │
-    │── SSH ──────────────────────▶  │
-    │   python agent.py '{...}'     │
-    │                               │── call LLM ──▶ OpenRouter
-    │                               │◀── response ──
-    │                               │── execute tool (if needed)
-    │                               │── call LLM with result
-    │                               │◀── final answer
-    │◀── JSON output ───────────────│
-    │                               │
-    │   compare against expected    │
-    │   ✅ or ❌                     │
-```
+**Grading:** The autochecker bot SSHes into the student's VM, runs the agent
+with 34 questions (25 shared + 9 bot-only), same stop-at-first-failure display.
 
 ### 9.2 What students see
 
-Students see results with green (pass) and red (fail). On pass, they see
-the question and their answer (so they can learn from correct answers).
-On fail, they see the question, their answer, and what was expected:
+Stop-at-first-failure — green for each pass, red for the first fail, then stop:
 
 ```
-Agent Evaluation: 18/30 (60%)
+  + [1/25] A teammate pushes broken code directly to main...
+  + [2/25] You see a commit message that just says 'fix'...
+  + [3/25] Your teammate and you both edited the same line...
 
-  ✅ What does REST stand for?
-     → "Representational State Transfer"
-  ✅ What HTTP status code means Not Found?
-     → "404"
-  ❌ What ORM does the backend use?
-     → Your answer: "SQLAlchemy"
-     → Expected: answer contains "SQLModel"
-  ❌ How many items are in the database?
-     → Your answer: "I don't have access to the database"
-     → Expected: a number > 0 (tool use required)
-  ✅ What port does Caddy listen on?
-     → "42002"
-  ...
+  x [4/25] You change your Python code and run 'docker compose up -d'...
+    Your answer: restart the container
+    Expected: answer should contain any of: ["--build", "build", ...]
+
+3/25 passed
 ```
 
-**Key design choice:** We show the expected answer on failure so students
-can fix their agent. We also show correct answers in green so students
-learn the material by examining passing results. The student targets one
-failed question at a time — diagnose → fix prompt/tool → re-run.
-
-**We do NOT reveal the full question bank upfront.** Students discover
-questions through running the eval. This prevents hard-coding answers.
+**Key design choices:**
+- Show expected answer on failure so students can fix their agent.
+- Stop at first failure to force sequential debugging (one fix at a time).
+- Questions ordered by difficulty: knowledge-only first, then tool-required.
+- Question bank is NOT revealed upfront — students discover questions by running eval.
 
 ### 9.3 Answer matching strategies
 
-| Strategy | When used | Example |
-|----------|-----------|---------|
-| `contains` | Answer must contain keyword(s) | Expected: contains "SQLModel" |
-| `regex` | Answer must match pattern | Expected: matches `\b40[14]\b` |
-| `numeric` | Answer is a number in range | Expected: number > 0 |
-| `exact` | Answer must match exactly | Expected: exactly "404" |
-| `any_of` | Answer contains any of listed values | Expected: any of ["FastAPI", "fastapi"] |
+See section 13.2 for the full matching strategy table. Strategies include:
+`contains`, `contains_all`, `any_of`, `regex`, `numeric_gt`, `numeric_range`.
 
-### 9.4 Tool usage verification
+### 9.4 Anti-gaming
 
-For questions tagged `requires_tool`, the autochecker also checks:
-- `tool_calls` array is non-empty
-- At least one call matches the expected tool name
-- The tool was called with reasonable arguments
-
-This prevents students from hard-coding answers without actually using tools.
+- The 9 bot-only questions are never served by the API — only encountered via autochecker SSH.
+- Students must build a genuinely working agent, not hard-code answers.
+- Every API request is logged (student email, timestamp, question index).
 
 ---
 
@@ -423,33 +394,36 @@ This prevents students from hard-coding answers without actually using tools.
 
 ### 10.1 Structure
 
+**File:** `autochecker/specs/lab-06-eval.yaml` (v2)
+
 - **25 script questions** (index 0-24) — served by the API for local testing
 - **9 bot-only questions** (index 25-33) — only in autochecker SSH eval
 - **34 total** for grading
 
-Questions are ordered by difficulty: tier 1 (no tools) first, then tier 2 (tools),
-then tier 3 (tools + reasoning). Students progress sequentially.
+Questions are derived from learning outcomes of labs 1-6. Scenario/understanding-
+focused — no trivia or "define X" filler. Ordered by difficulty within each tier.
 
 ### 10.2 Topic coverage
 
-| Topic | Lab | Script Qs | Bot-only Qs |
-|-------|-----|-----------|-------------|
-| Git | 1 | 4 | 0 |
-| HTTP & REST | 2-3 | 6 | 0 |
-| Docker | 2 | 3 | 0 |
-| SQL & Databases | 3 | 2 | 0 |
-| Testing | 4 | 2 | 0 |
-| ETL | 5 | 2 | 0 |
-| Agents | 6 | 2 | 0 |
-| System-specific (tools) | 2-5 | 4 | 5 |
-| Live system (tools) | 3-5 | 0 | 4 |
+Questions map to labs 1-6 learning outcomes:
+
+| Topic | Labs | Examples |
+|-------|------|----------|
+| Git workflow | 1 | Branch protection, merge conflicts, conventional commits |
+| HTTP & REST | 2-3 | Status codes, methods, idempotency, auth |
+| Docker | 2 | Build vs recreate, volumes, compose commands |
+| SQL & Databases | 3 | Migrations, ORM, constraints |
+| Testing | 4 | Pytest, test isolation, code coverage |
+| ETL & Analytics | 5 | Extract-Transform-Load, data pipelines |
+| Agents | 6 | Agent loop, tool calling, prompt engineering |
+| System-specific | 2-5 | Requires `read_file`, `list_files`, or `query_api` tools |
 
 ### 10.3 Tier breakdown
 
 | Tier | After task | Description | Script | Bot-only | Total |
 |------|-----------|-------------|--------|----------|-------|
-| 1 | Task 1 | Course knowledge, no tools | 21 | 0 | 21 |
-| 2 | Task 2 | Requires tool implementations | 4 | 5 | 9 |
+| 1 | Task 1 | Course knowledge, no tools needed | 17 | 0 | 17 |
+| 2 | Task 2 | Requires tool implementations | 8 | 5 | 13 |
 | 3 | Task 3 | Tools + reasoning, edge cases | 0 | 4 | 4 |
 
 ### 10.4 Black-box design
@@ -508,25 +482,29 @@ python agent.py "What does REST stand for?"
 Security: restrict file tools to project dir. Auth: `query_api` uses `LMS_API_KEY`.
 Agentic loop: max 10 tool calls per question.
 
-### Task 3: Pass the Benchmark — NOT YET WRITTEN
+### Task 3: Pass the Benchmark — WRITTEN
 
 **Goal:** Iterate on the agent until it passes the full eval benchmark (≥75%).
 
-**Planned deliverables:**
-1. Plan (`plans/task-3.md`)
-2. Agent improvements (update `agent.py`)
-3. Documentation (update `AGENT.md`)
-4. Tests
-5. Deployment
+**File:** `lab/tasks/required/task-3.md`
 
-**What the autochecker checks:**
-- Full eval (all ~34 questions) — ≥26/34 (~75%) must pass
+**Deliverables** (5, each with a prescribed commit message):
+1. **Plan** (`plans/task-3.md`) — initial score, first failures, strategy
+2. **Agent improvements** (update `agent.py`) — iterate until 25/25 locally
+3. **Documentation** (update `AGENT.md`) — final architecture, lessons learned, eval score
+4. **Tests** — updated regression tests with benchmark edge cases
+5. **Deployment** — agent passes autochecker bot (≥26/34 = 75%)
+
+**Key features:**
+- Debugging workflow table (symptom → likely cause → fix)
+- `run_eval.py` as the primary iteration tool
+- Stop-at-first-failure forces sequential diagnosis
 
 **What students learn:**
 - Prompt engineering through iteration (not theory)
-- Debugging agent behavior
-- That agent quality comes from iteration, not from writing code once
+- Debugging agent behavior (examining tool calls, prompt issues)
 - Course material — by examining correct and incorrect answers
+- That agent quality comes from iteration, not from writing code once
 
 ---
 
@@ -591,18 +569,21 @@ Agentic loop: max 10 tool calls per question.
 | Debugging failures | Student |
 | Improving prompts | Student |
 
-### 12.4 Automation opportunities
+### 12.4 `run_eval.py` — the primary iteration tool
 
-Students can automate parts of their workflow:
+Students iterate using the shipped `run_eval.py` script:
 
-- **Local eval script** — loop through known questions and check answers
-- **Prompt testing** — try different system prompts, compare results
-- **Tool testing** — unit test their tool functions independently
-- **CI** — run a subset of checks on push (optional)
+```bash
+python run_eval.py
+```
 
-The lab encourages this kind of engineering discipline: if you're iterating
-on 30+ questions, manual testing is slow. Building your own test harness
-teaches the value of automation.
+The script reads autochecker credentials from `.env` / `.env.docker.secret`,
+fetches 25 questions one at a time from the API, runs the agent locally,
+and evaluates answers. Stops at the first failure with diagnostic output.
+
+This replaces manual question-by-question testing. Students also write
+regression tests (unit tests for tools, subprocess tests for the full agent)
+to catch regressions as they iterate.
 
 ---
 
@@ -629,7 +610,7 @@ Students already have these configured in `.env`.
 
 ```
 GET /api/eval/question
-  Auth: Bearer <token>
+  Auth: Basic <base64(email:password)>
   Query: ?lab=lab-06&index=0
   →
   {
@@ -792,10 +773,15 @@ checks:
 
 ## 16. Remaining Work
 
-- [ ] Write Task 3 (Pass the Benchmark) — `lab/tasks/required/task-3.md`
-- [ ] Create question bank YAML (`lab-06-eval.yaml`)
-- [ ] Create autochecker spec (`autochecker/specs/lab-06.yaml`)
-- [ ] Implement `agent_eval` check type in autochecker engine
-- [ ] Clean up old lab 5 content from `task-3.md` and `optional/task-1.md`
-- [ ] Update `instructors/lab-plan.md` in submodule to match final design
-- [ ] Decide on example questions for local testing (#7)
+- [x] Write Task 1 (Basic Agent Loop) — `lab/tasks/required/task-1.md`
+- [x] Write Task 2 (Add Tools) — `lab/tasks/required/task-2.md`
+- [x] Write Task 3 (Pass the Benchmark) — `lab/tasks/required/task-3.md`
+- [x] Create question bank YAML v2 (`autochecker/specs/lab-06-eval.yaml`)
+- [x] Implement eval API endpoint (`GET /api/eval/question` in dashboard)
+- [x] Implement `run_eval.py` (shipped in lab repo)
+- [x] Update README with lab story and learning advice
+- [x] Deploy autochecker with eval endpoint
+- [x] Create autochecker spec (`autochecker/specs/lab-06.yaml`)
+- [x] Implement `agent_eval` check type in autochecker engine
+- [x] Clean up old lab 5 content from `optional/task-1.md`
+- [x] Update `instructors/lab-plan.md` in submodule to match final design
