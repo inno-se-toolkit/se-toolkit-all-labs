@@ -1,14 +1,12 @@
 # Lab 06 — Build Your Own Agent: Design Document
 
-> **Status:** All 3 tasks written. Question bank (v2) created. Eval API endpoint deployed. `run_eval.py` shipped. Autochecker spec pending.
+> **Status:** Redesign v2. New task structure based on colleague feedback. Tasks and question bank need rewriting. Eval infrastructure (API endpoint, `run_eval.py`, `agent_eval` engine check) already implemented and reusable.
 
 ## 1. Lab Vision
 
 **Slogan:** "Everybody should implement an agent loop at some point."
 
-**One-liner:** Students build a CLI agent from scratch that answers questions
-about their system and the course, evaluated against a hidden benchmark —
-like building an algorithm against a test suite.
+**One-liner:** Students build a CLI agent that reads their project wiki, answers questions about the course, then connects to their live system to analyze logs and diagnose bugs.
 
 ### 1.1 Why This Lab
 
@@ -27,12 +25,22 @@ at two levels:
 
 | Principle | Implication |
 |-----------|-------------|
-| **Learn by debugging, not by one-shotting** | Students iterate against a benchmark. They see what fails, diagnose why, fix it, re-run. The debugging loop IS the learning. |
-| **Specify interfaces, not implementations** | We define CLI input/output format, tool schemas, eval criteria. How they build the agent is up to them. They can plan with an AI agent. |
+| **Deterministic first, open-ended later** | Task 1 has fully deterministic answers (wiki sections). Task 2 has mostly deterministic answers (static system facts). Task 3 adds open-ended chain questions. |
+| **Learn by debugging, not by one-shotting** | Students iterate against a benchmark. They see what fails, diagnose why, fix it, re-run. |
+| **Specify interfaces, not implementations** | We define CLI input/output format, tool schemas, eval criteria. How they build the agent is up to them. |
 | **Evaluate the agent, evaluate the student** | The question bank tests both whether the agent works correctly AND whether the student understands the course material. |
-| **Build on what exists** | The agent operates on their deployed lab 5 system. No new infrastructure — they already have a VM, a backend, a database, a frontend. |
-| **Clearly useful** | The agent helps them understand their own system and review course material. It's not a toy exercise. |
-| **Progressive difficulty** | Basic questions work with just an LLM. Tool questions require real tool implementations. Edge cases require iteration and prompt engineering. |
+| **Build on what exists** | The agent operates on their deployed lab 5 system. No new infrastructure. |
+| **Progressive difficulty** | Wiki lookup → system queries → log analysis chains. Each task builds on the previous. |
+
+### 1.3 Feedback Addressed
+
+| Concern | Source | Resolution |
+|---------|--------|------------|
+| Tool use behavior depends on the model | Colleague 1 | LLM setup + tool calling verification moved to Setup. Recommend specific models known to work. |
+| Weak models give inconsistent results ("pay-to-win") | Colleague 1 | Task 1 answers are deterministic (wiki sections). Model quality matters less when the answer is a fact. |
+| Answers aren't deterministic or verifiable by students | Colleague 2 | Task 1: wiki section = deterministic. Task 2: static system facts = deterministic. Data queries use range checks. |
+| Students will hardcode if error messages show expected answers | Colleague 2 | Hidden questions include chain-of-tool questions that can't be hardcoded. LLM judge for open-ended hidden questions. |
+| Tool use questions come too late in benchmark | Colleague 1 | Task 1 requires tools from the start (read_file, list_files for wiki). No "no-tools" warm-up phase. |
 
 ---
 
@@ -47,32 +55,42 @@ at two levels:
 | 5 | Data pipeline + Analytics | ETL, httpx, SQL aggregation, Chart.js dashboards |
 | 6 | **Build Your Own Agent** | **Agent loop, LLM API, tool calling, prompt engineering** |
 
-**Desired vs actual gap:** Labs 1-3 are heavily scaffolded (follow steps, fix
-prescribed bugs, copy patterns). Lab 4 introduces AI agents as a tool to use,
-not to understand. Lab 5 is more independent but still template-driven. Many
-students completed the work without deeply understanding what they built.
-
-**Lab 6 closes this gap** by requiring students to:
-- Build an agent that demonstrates understanding of the mechanics
-- Answer questions that require understanding of the course material
-- Debug failures that require understanding of their own system
-
 ---
 
-## 3. Prerequisites and Setup
+## 3. Setup
 
-Students begin with their lab 5 system deployed and running on their VM:
+Students begin with their lab 5 system deployed and running on their VM.
+Setup now also includes LLM configuration and tool-calling verification.
+
+### 3.1 Prerequisites (from lab 5)
 
 - **Backend** (FastAPI) on port 42001 (via Docker)
 - **Frontend** (React + Caddy) on port 42002
 - **PostgreSQL** on port 42004
 - **All services** running via `docker compose`
 - **ETL pipeline** has been run (database has data)
-- **Analytics endpoints** are implemented and functional
 
-**Setup task:** Verify that their lab 5 deployment is operational. The
-autochecker will validate SSH access, API reachability, and that the database
-contains data before running agent evaluations.
+### 3.2 LLM setup (new in v2)
+
+Students create an OpenRouter account, get an API key, and configure
+`.env.agent.secret`. They then run a provided verification script that tests:
+
+1. **Basic LLM call** — send a prompt, get a response.
+2. **Tool calling** — send a tool definition, verify the LLM returns a `tool_calls` response.
+
+If tool calling fails, the student switches models before starting any graded work.
+
+**Recommended models** (free, reliable tool calling):
+
+| Model | Context | Tool calling | Notes |
+|-------|---------|-------------|-------|
+| `meta-llama/llama-4-scout:free` | 512k | Strong | Best free option |
+| `meta-llama/llama-3.3-70b-instruct:free` | 128k | Strong | Reliable fallback |
+| `qwen/qwen-2.5-72b-instruct:free` | 128k | Good | Alternative |
+
+> **Key decision:** LLM setup is in Setup, not Task 1. Students discover
+> model issues before any graded work. This directly addresses the
+> "pay-to-win" and "tool use is weird" feedback.
 
 ---
 
@@ -84,12 +102,12 @@ contains data before running agent evaluations.
 │                                                              │
 │  ┌──────────────┐     ┌──────────────────────────────────┐   │
 │  │  agent.py    │────▶│  OpenRouter API (free LLM)       │   │
-│  │  (CLI)       │◀────│  meta-llama/llama-3.3-70b:free   │   │
+│  │  (CLI)       │◀────│  tool calling models              │   │
 │  └──────┬───────┘     └──────────────────────────────────┘   │
 │         │                                                    │
 │         │ tool calls                                         │
-│         ├──────────▶ read_file(path) ──▶ local filesystem    │
-│         ├──────────▶ list_files(dir)  ──▶ local filesystem   │
+│         ├──────────▶ read_file(path) ──▶ wiki/, source code  │
+│         ├──────────▶ list_files(dir)  ──▶ wiki/, directories │
 │         ├──────────▶ query_api(path)  ──▶ localhost:42002    │
 │         │                                                    │
 │  ┌──────┴───────┐                                            │
@@ -97,691 +115,453 @@ contains data before running agent evaluations.
 │  │  Compose     │  caddy (frontend)                          │
 │  └──────────────┘                                            │
 └──────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────┐
-│  Autochecker                                                 │
-│                                                              │
-│  SSH ──▶ python agent.py "..." ──▶ stdout     │
-│       ◀── JSON output (answer + tool_calls)                  │
-│                                                              │
-│  Compare answer against expected ──▶ PASS / FAIL             │
-└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 5. LLM Access
+## 5. CLI Interface Specification
 
-### Decision: OpenRouter with free models
+### 5.1 Input
 
-**Chosen:** OpenRouter free tier.
-
-**Rationale:**
-- Zero cost — no credit card, no budget concerns
-- OpenAI-compatible API (`POST /v1/chat/completions`) — transferable knowledge
-- 18 free models support tool/function calling
-- Students create an account, get an API key, done
-
-**Alternatives considered:**
-
-| Option | Pros | Cons | Verdict |
-|--------|------|------|---------|
-| OpenRouter free | Zero cost, many models, tool support | Rate limits (RPM/RPD), model quality varies | **Selected** |
-| Shared API key | Equal access, no student setup | Key leaks, hard to rate-limit per student | Rejected |
-| Students bring own | Flexibility | Unequal access, cost barrier, harder to debug | Rejected |
-| Local models (Ollama) | No API dependency | VM resources limited, tool calling unreliable | Rejected |
-
-**Recommended default model:** `meta-llama/llama-3.3-70b-instruct:free`
-- 128k context, strong tool calling, good instruction following
-- Students may switch to any free model with tool support
-
-**Configuration:** Students store LLM credentials in `.env.agent.secret`
-(gitignored by the `*.secret` pattern). An `.env.agent.example` is committed:
-- `LLM_API_KEY` — LLM provider API key
-- `LLM_API_BASE` — OpenAI-compatible endpoint URL
-- `LLM_MODEL` — model name
-
-> **Two distinct keys:** `LMS_API_KEY` (in `.env.docker.secret`) protects
-> the backend LMS endpoints. `LLM_API_KEY` (in `.env.agent.secret`)
-> authenticates with the LLM provider. The rename from `API_KEY` to
-> `LMS_API_KEY` was done to avoid this confusion.
-
-**Rate limits (free tier):**
-- Requests per minute: capped (exact value varies)
-- Requests per day: capped; increases if user has purchased credits
-- Sufficient for lab work — students aren't doing bulk inference
-- If rate-limited: wait and retry (good practice to implement)
-
----
-
-## 6. Tool Interface
-
-### Decision: OpenAI-style function calling
-
-**Chosen:** Standard OpenAI function calling format via the `tools` parameter
-in the chat completions API.
-
-**Rationale:** This IS how agents work in practice. The pedagogical goal is to
-demystify agents — using the real industry standard serves that directly.
-OpenRouter's free models support it natively.
-
-**Alternatives considered:**
-
-| Option | Pros | Cons | Verdict |
-|--------|------|------|---------|
-| OpenAI-style `tools` param | Industry standard, LLM handles parsing, structured | More boilerplate | **Selected** |
-| Provided SDK/wrapper | Less boilerplate | Hides how agents work — defeats the goal | Rejected |
-| Free-form text parsing | Simple concept | Fragile, wastes time on regex bugs, non-standard | Rejected |
-
-### How it works
-
-Students define tools as JSON schemas in their API request:
-
-```python
-tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "read_file",
-            "description": "Read contents of a file from the project repository",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "path": {
-                        "type": "string",
-                        "description": "Relative path from project root, e.g. 'backend/app/main.py'"
-                    }
-                },
-                "required": ["path"]
-            }
-        }
-    }
-]
+```bash
+python agent.py "How do you resolve a merge conflict?"
 ```
 
-The LLM returns structured tool calls:
+### 5.2 Output
 
 ```json
 {
+  "answer": "Edit the conflicting file, choose which changes to keep, then stage and commit.",
+  "source": "wiki/git-workflow.md#resolving-merge-conflicts",
   "tool_calls": [
-    {
-      "id": "call_123",
-      "function": {
-        "name": "read_file",
-        "arguments": "{\"path\": \"backend/app/main.py\"}"
-      }
-    }
+    {"tool": "list_files", "args": {"path": "wiki"}, "result": "git-workflow.md\n..."},
+    {"tool": "read_file", "args": {"path": "wiki/git-workflow.md"}, "result": "..."}
   ]
 }
 ```
 
-The student executes the tool, sends the result back as a `tool` message,
-and the LLM incorporates it into its final answer.
+**Fields:**
+- `answer` (string, required) — the agent's answer to the question.
+- `source` (string, optional) — wiki section reference for wiki questions (`wiki/file.md#section`). Required in Task 1, optional in Tasks 2-3.
+- `tool_calls` (array, required) — list of tool calls made. Empty array if none.
+
+**Rules:**
+- Output MUST be valid JSON on a single line to stdout.
+- Debug/progress output goes to stderr only.
+- 60-second timeout per question.
+- Exit code 0 on success.
+- Maximum 10 tool calls per question.
 
 ---
 
-## 7. Required Tools
+## 6. Required Tools
 
-Students must implement these tools for their agent. The tool names and
-parameter schemas are prescribed (the autochecker verifies tool usage in
-the output). The implementation is up to the student.
-
-### 7.1 `read_file`
-
-Read the contents of a file from the project repository.
+### 6.1 `read_file`
 
 ```
 Name:        read_file
 Parameters:  path (string, required) — relative path from project root
-Returns:     File contents as string, or error message if file not found
-Example:     read_file("backend/app/main.py") → "from fastapi import FastAPI..."
+Returns:     File contents as string, or error message if not found
+Security:    Must restrict to project directory
 ```
 
-**What it enables:** Code inspection questions — "What framework does the
-backend use?", "What ORM is used?", "How does authentication work?"
+Used in Task 1 (wiki files) and Task 2 (source code, logs).
 
-Security: must restrict to the project directory (no reading `/etc/passwd`).
-
-### 7.2 `list_files`
-
-List files and directories at a given path.
+### 6.2 `list_files`
 
 ```
 Name:        list_files
-Parameters:  path (string, required) — relative directory path from project root
-Returns:     List of filenames/subdirectories as string
-Example:     list_files("backend/app/routers") → "analytics.py\ninteractions.py\nitems.py\n..."
+Parameters:  path (string, required) — relative directory path
+Returns:     Newline-separated listing of entries
+Security:    Must restrict to project directory
 ```
 
-**What it enables:** Discovery questions — "How many routers does the backend
-have?", "What source files are in the frontend?"
+Used in Task 1 (discover wiki files) and Task 2 (explore code structure).
 
-### 7.3 `query_api`
-
-Make an HTTP request to the deployed backend API.
+### 6.3 `query_api`
 
 ```
 Name:        query_api
-Parameters:  method (string, required) — HTTP method (GET, POST)
-             path (string, required) — API path, e.g. "/analytics/scores?lab=lab-04"
-             body (string, optional) — JSON request body for POST requests
-Returns:     JSON string with status_code and response body
-Example:     query_api("GET", "/items/") → {"status": 200, "body": [{"id": 1, ...}]}
+Parameters:  method (string) — HTTP method (GET, POST)
+             path (string) — API path, e.g. "/items/"
+             body (string, optional) — JSON request body
+Returns:     JSON with status_code and body
+Auth:        Uses LMS_API_KEY from .env.docker.secret
 ```
 
-**What it enables:** System introspection — "How many items are in the
-database?", "What is the average score for lab-04?", "What status code does
-an unauthenticated request return?"
-
-The tool must handle authentication (include `LMS_API_KEY` from
-`.env.docker.secret` in the request header as a Bearer token).
+Introduced in Task 2 for system queries.
 
 ---
 
-## 8. CLI Interface Specification
+## 7. Question Classes and Benchmark Design
 
-### 8.1 Input
-
-The agent is invoked via command line with a plain string argument:
-
-```bash
-python agent.py "What does REST stand for?"
-```
-
-The question is the first positional argument. No JSON wrapping.
-
-### 8.2 Output
-
-The agent prints a single JSON object to stdout:
+### 7.1 Output format (all classes)
 
 ```json
 {
-  "answer": "REST stands for Representational State Transfer.",
-  "tool_calls": [
-    {
-      "tool": "read_file",
-      "args": {"path": "backend/app/main.py"},
-      "result": "from fastapi import FastAPI..."
-    }
-  ]
+  "answer": "The text answer",
+  "source": "wiki/file.md#section",
+  "tool_calls": [{"tool": "...", "args": {...}, "result": "..."}]
 }
 ```
 
-Output schema:
-```json
-{
-  "answer": "string (required) — the agent's final answer",
-  "tool_calls": [
-    {
-      "tool": "string — tool name",
-      "args": "object — arguments passed to the tool",
-      "result": "string — tool execution result (truncated to 500 chars)"
-    }
+### 7.2 Class A: Wiki lookup (Task 1)
+
+**What:** Questions about course material. The answer lives in a wiki section.
+
+**Example:**
+```
+Q: "How do you resolve a merge conflict?"
+→ answer: "Edit the conflicting file, choose which changes to keep, then stage and commit."
+→ source: "wiki/git-workflow.md#resolving-merge-conflicts"
+→ tool_calls: [list_files("wiki"), read_file("wiki/git-workflow.md")]
+```
+
+**Checking:**
+
+| Check | Method | Required |
+|-------|--------|----------|
+| Source section | `source` field matches expected path (exact or `any_of`) | Yes |
+| Answer relevance | `answer` contains keywords from the section | Optional |
+| Tool usage | `tool_calls` includes `read_file` or `list_files` | Yes |
+
+**Why deterministic:** The correct section is a fact. Either the agent found it or it didn't. Students can verify by reading the section themselves.
+
+**Prerequisite:** The wiki must comprehensively cover labs 1-6 material.
+
+**Count:** ~15 in `run_eval.py`, ~5 hidden in bot eval.
+
+### 7.3 Class B: Static system facts (Task 2)
+
+**What:** Questions about the system where the answer is always the same regardless of data. Config values, ports, frameworks, status codes.
+
+**Example:**
+```
+Q: "What HTTP status code does the API return when you request /items/ without authentication?"
+→ answer: "401 Unauthorized"
+→ tool_calls: [{tool: "query_api", args: {method: "GET", path: "/items/"}}]
+```
+
+**Checking:**
+
+| Check | Method | Required |
+|-------|--------|----------|
+| Answer | `contains`, `any_of`, or `regex` | Yes |
+| Tool usage | `tool_calls` includes expected tool | Yes |
+
+**Why deterministic:** These values are baked into the code/config. Port 8000 is always 8000. Unauthenticated request always returns 401.
+
+**Examples:**
+- "What framework does the backend use?" → contains "FastAPI", expects `read_file`
+- "What port does FastAPI listen on inside the container?" → contains "8000", expects `read_file`
+- "What status code for a nonexistent endpoint?" → contains "404", expects `query_api`
+- "What ORM does the project use?" → contains "SQLModel", expects `read_file`
+
+**Count:** ~8 in `run_eval.py`, ~3 hidden.
+
+### 7.4 Class C: Data-dependent system queries (Task 2)
+
+**What:** Questions about live data. Answer varies per student but can be range-checked.
+
+**Example:**
+```
+Q: "How many items are currently in the database?"
+→ answer: "There are 47 items."
+→ tool_calls: [{tool: "query_api", args: {method: "GET", path: "/items/"}}]
+```
+
+**Checking:**
+
+| Check | Method | Required |
+|-------|--------|----------|
+| Answer plausibility | `numeric_gt` or `numeric_range` | Yes |
+| Tool usage | `tool_calls` includes `query_api` | Yes |
+
+**Why it works:** We don't check exact numbers. We check that a number exists and is in a plausible range. The tool call proves the agent actually queried the system.
+
+**Count:** ~3 in `run_eval.py`, ~2 hidden.
+
+### 7.5 Class D: Log analysis chain (Task 3, hidden only)
+
+**What:** Multi-step questions requiring a chain of tool calls. Planted bugs produce log errors that the agent must find, trace to source, and diagnose.
+
+**Example:**
+```
+Q: "Check the application logs for errors. What is causing the most recent error and which file is it in?"
+→ answer: "ZeroDivisionError in backend/app/routers/analytics.py line 42,
+   in average_score when group has no submissions. Fix: check for empty results."
+→ tool_calls: [
+    {tool: "query_api", args: {path: "/logs"}},
+    {tool: "read_file", args: {path: "backend/app/routers/analytics.py"}}
   ]
-}
 ```
 
-**Rules:**
-- Output MUST be valid JSON on a single line to stdout
-- `answer` is required and must directly answer the question
-- `tool_calls` is required (empty array `[]` if no tools were used)
-- Any logs, debug output, or progress messages go to stderr, not stdout
-- The agent must complete within 60 seconds per question
-- Exit code 0 on success, non-zero on error
+**Checking:**
 
-### 8.3 Consistent across all tasks
+| Check | Method | Required |
+|-------|--------|----------|
+| Bug identified | `answer` contains bug identifier (e.g., "ZeroDivisionError") | Yes |
+| Source file found | `answer` contains expected file path | Yes |
+| Fix suggested | `answer` contains fix keyword (e.g., "check", "empty") | Optional |
+| Tool chain | `tool_calls` includes log-reading AND file-reading tools | Yes |
+| Fix quality | LLM judge with rubric | Optional |
 
-The interface is the same from task 1 through task 3. In task 1, `tool_calls`
-will be `[]` because no tools are implemented yet. By task 2, tool calls
-should appear for questions that require them.
+**Planted bugs:**
+
+| Bug | Where | Log output | Expected identification |
+|-----|-------|-----------|----------------------|
+| Division by zero on empty group | `analytics.py` | `ZeroDivisionError` in logs | Error + file + empty-check fix |
+| Unclosed resource in edge case | `etl.py` | `ResourceWarning` in logs | Warning + file + context-manager fix |
+| Hardcoded timeout as string | `config.py` | `TypeError` caught and logged | Type error + file + int conversion fix |
+
+**Why this works:** Bugs are planted by us. We know exactly what the logs contain and what the correct diagnosis is. Checking is keyword-based (bug name, file path) plus optional LLM judge.
+
+**Count:** 3-5 hidden questions (bot eval only).
+
+### 7.6 Class E: LLM-judged reasoning (Task 3, hidden only)
+
+**What:** Open-ended questions where keyword matching isn't sufficient. An LLM judge evaluates the answer against a rubric.
+
+**Example:**
+```
+Q: "Compare how the ETL pipeline handles failures vs how the API endpoints
+    handle failures. Which approach is more robust and why?"
+→ answer: "The ETL pipeline uses idempotent upserts so partial failures
+   can be retried... The API endpoints return error codes but don't have
+   retry logic... ETL is more robust because..."
+→ tool_calls: [read_file("backend/app/etl.py"), read_file("backend/app/routers/...")]
+```
+
+**Checking:**
+
+| Check | Method | Required |
+|-------|--------|----------|
+| Answer quality | LLM judge (rubric: mentions both, compares, gives reasoning) | Yes |
+| Tool usage | `tool_calls` includes `read_file` for relevant files | Yes |
+
+**Budget:** ~5 questions × ~$0.01 per judge call = ~$0.05/student. For 60 students = ~$3 total. Use a cheap fast model (Haiku/Flash) as judge.
+
+**Count:** 3-5 hidden questions (bot eval only).
+
+### 7.7 Summary: questions per task
+
+| Class | Task | `run_eval.py` | Bot-only | Checking method |
+|-------|------|--------------|----------|-----------------|
+| A: Wiki lookup | 1 | ~15 | ~5 | Section path match + tool use |
+| B: Static system facts | 2 | ~8 | ~3 | Keyword match + tool use |
+| C: Data-dependent queries | 2 | ~3 | ~2 | Numeric range + tool use |
+| D: Log analysis chain | 3 | 0 | 3-5 | Bug ID + file + tool chain |
+| E: LLM-judged reasoning | 3 | 0 | 3-5 | LLM judge with rubric |
+| **Total** | | **~26** | **~13-17** | |
 
 ---
 
-## 9. Evaluation Design
+## 8. Task Structure (v2)
 
-> **Note:** This section provides the conceptual overview. Section 13 has
-> the full implementation details (API endpoint, matching strategies, bot eval).
+### Setup — LLM and System Verification
 
-### 9.1 How evaluation works
+**Goal:** Verify lab 5 system is running, set up LLM with tool calling.
 
-Two paths: local iteration (`run_eval.py`) and grading (autochecker SSH).
+**What's new vs v1:** LLM setup + tool calling verification moves here.
+Students discover model issues before any graded work.
 
-**Local iteration:** Students run `python run_eval.py` which fetches questions
-one at a time from the autochecker API, runs their agent locally, and checks
-the answer. Stops at the first failure — students fix that question and re-run.
+**Deliverables:**
+1. Fork and clone repo
+2. Verify lab 5 system on VM (SSH, API reachable, data exists)
+3. Create OpenRouter account, configure `.env.agent.secret`
+4. Run verification script: basic LLM call + tool calling test pass
 
-**Grading:** The autochecker bot SSHes into the student's VM, runs the agent
-with 34 questions (25 shared + 9 bot-only), same stop-at-first-failure display.
+### Task 1 — The Documentation Agent
 
-### 9.2 What students see
+**Goal:** Build an agent that answers questions by finding the relevant wiki section and providing the answer.
 
-Stop-at-first-failure — green for each pass, red for the first fail, then stop:
+**Narrative:** "Your project has a wiki full of documentation. Build an agent that reads it for you — given a question, it finds the right section and answers from it."
 
-```
-  + [1/25] A teammate pushes broken code directly to main...
-  + [2/25] You see a commit message that just says 'fix'...
-  + [3/25] Your teammate and you both edited the same line...
-
-  x [4/25] You change your Python code and run 'docker compose up -d'...
-    Your answer: restart the container
-    Expected: answer should contain any of: ["--build", "build", ...]
-
-3/25 passed
-```
-
-**Key design choices:**
-- Show expected answer on failure so students can fix their agent.
-- Stop at first failure to force sequential debugging (one fix at a time).
-- Questions ordered by difficulty: knowledge-only first, then tool-required.
-- Question bank is NOT revealed upfront — students discover questions by running eval.
-
-### 9.3 Answer matching strategies
-
-See section 13.2 for the full matching strategy table. Strategies include:
-`contains`, `contains_all`, `any_of`, `regex`, `numeric_gt`, `numeric_range`.
-
-### 9.4 Anti-gaming
-
-- The 9 bot-only questions are never served by the API — only encountered via autochecker SSH.
-- Students must build a genuinely working agent, not hard-code answers.
-- Every API request is logged (student email, timestamp, question index).
-
----
-
-## 10. Question Bank Design
-
-**File:** `lab-06-eval.yaml` (in parent repo, not shipped to students)
-
-### 10.1 Structure
-
-**File:** `autochecker/specs/lab-06-eval.yaml` (v2)
-
-- **25 script questions** (index 0-24) — served by the API for local testing
-- **9 bot-only questions** (index 25-33) — only in autochecker SSH eval
-- **34 total** for grading
-
-Questions are derived from learning outcomes of labs 1-6. Scenario/understanding-
-focused — no trivia or "define X" filler. Ordered by difficulty within each tier.
-
-### 10.2 Topic coverage
-
-Questions map to labs 1-6 learning outcomes:
-
-| Topic | Labs | Examples |
-|-------|------|----------|
-| Git workflow | 1 | Branch protection, merge conflicts, conventional commits |
-| HTTP & REST | 2-3 | Status codes, methods, idempotency, auth |
-| Docker | 2 | Build vs recreate, volumes, compose commands |
-| SQL & Databases | 3 | Migrations, ORM, constraints |
-| Testing | 4 | Pytest, test isolation, code coverage |
-| ETL & Analytics | 5 | Extract-Transform-Load, data pipelines |
-| Agents | 6 | Agent loop, tool calling, prompt engineering |
-| System-specific | 2-5 | Requires `read_file`, `list_files`, or `query_api` tools |
-
-### 10.3 Tier breakdown
-
-| Tier | After task | Description | Script | Bot-only | Total |
-|------|-----------|-------------|--------|----------|-------|
-| 1 | Task 1 | Course knowledge, no tools needed | 17 | 0 | 17 |
-| 2 | Task 2 | Requires tool implementations | 8 | 5 | 13 |
-| 3 | Task 3 | Tools + reasoning, edge cases | 0 | 4 | 4 |
-
-### 10.4 Black-box design
-
-- Students never see the question bank file.
-- The API serves one question at a time by index.
-- The 9 bot-only questions prevent gaming — students must build a real agent.
-- Stop-at-first-failure forces sequential debugging.
-
----
-
-## 11. Task Structure
-
-> Tasks are deliverable-focused (WHAT, not HOW). Each follows:
-> git workflow → what you build → CLI interface → deliverables → acceptance criteria.
->
-> Git workflow per task: Issue → branch (e.g. `task/basic-agent-loop`) →
-> conventional commits → PR to fork's `main` with `Closes #N` → review → merge → close → delete branch.
-
-### Task 1: Basic Agent Loop — WRITTEN
-
-**Goal:** Build a CLI that takes a question, calls an LLM, and returns an answer.
-
-**File:** `lab/tasks/required/task-1.md`
-
-**Deliverables** (5, each with a prescribed commit message):
-1. **Plan** (`plans/task-1.md`) — provider choice, structure, system prompt strategy
-2. **Agent** (`agent.py`) — CLI in project root, plain string input, JSON output
-3. **Documentation** (`AGENT.md`) — architecture, provider, system prompt, how to run
-4. **Tests** (5 regression tests) — subprocess, parse JSON, check keywords
-5. **Deployment** — agent works on VM via SSH
-
-**Interface:**
-```bash
-python agent.py "What does REST stand for?"
-# stdout: {"answer": "Representational State Transfer.", "tool_calls": []}
-```
-
-**Acceptance criteria include:** issue closed by PR, plan committed before code,
-5 tests pass, agent works on VM.
-
-### Task 2: Add Tools — WRITTEN
-
-**Goal:** Implement tools (read_file, list_files, query_api) and the agentic loop.
-
-**File:** `lab/tasks/required/task-2.md`
-
-**Deliverables** (5, each with a prescribed commit message):
-1. **Plan** (`plans/task-2.md`) — tool schemas, loop design, security
-2. **Tools + loop** (update `agent.py`) — 3 tools, agentic loop, tool_calls populated
-3. **Documentation** (update `AGENT.md`) — tools, loop, new config
-4. **Tests** (5 regression tests) — verify tool_calls non-empty, correct tool names
-5. **Deployment** — tools work on VM, `LMS_API_KEY` available for `query_api`
-
-**Tools:** `read_file(path)`, `list_files(path)`, `query_api(method, path, body?)`.
-Security: restrict file tools to project dir. Auth: `query_api` uses `LMS_API_KEY`.
-Agentic loop: max 10 tool calls per question.
-
-### Task 3: Pass the Benchmark — WRITTEN
-
-**Goal:** Iterate on the agent until it passes the full eval benchmark (≥75%).
-
-**File:** `lab/tasks/required/task-3.md`
-
-**Deliverables** (5, each with a prescribed commit message):
-1. **Plan** (`plans/task-3.md`) — initial score, first failures, strategy
-2. **Agent improvements** (update `agent.py`) — iterate until 25/25 locally
-3. **Documentation** (update `AGENT.md`) — final architecture, lessons learned, eval score
-4. **Tests** — updated regression tests with benchmark edge cases
-5. **Deployment** — agent passes autochecker bot (≥26/34 = 75%)
-
-**Key features:**
-- Debugging workflow table (symptom → likely cause → fix)
-- `run_eval.py` as the primary iteration tool
-- Stop-at-first-failure forces sequential diagnosis
+**What students build:**
+- `agent.py` CLI with JSON output (answer + source + tool_calls)
+- Tools: `read_file`, `list_files` (to navigate `wiki/`)
+- Agentic loop: list wiki files → read relevant file → identify section → answer
+- System prompt that understands the task
 
 **What students learn:**
-- Prompt engineering through iteration (not theory)
-- Debugging agent behavior (examining tool calls, prompt issues)
-- Course material — by examining correct and incorrect answers
-- That agent quality comes from iteration, not from writing code once
+- LLM API integration with tool calling
+- The agentic loop (call LLM → execute tool → feed back → repeat)
+- CLI design with structured JSON output
+- How agents use tools to ground answers in real data (not hallucinate)
+
+**Benchmark:** ~15 Class A (wiki lookup) questions. All deterministic.
+
+### Task 2 — The System Agent
+
+**Goal:** Connect the agent to the live system so it can answer questions about the actual deployment.
+
+**Narrative:** "Your agent can read docs. Now give it access to the running system — the API, the codebase, the configuration. Make it useful."
+
+**What students build:**
+- `query_api` tool (HTTP requests to the backend)
+- Extended `read_file` use (source code, config, docker-compose.yml)
+- Updated system prompt for system questions
+
+**What students learn:**
+- HTTP API integration from code
+- Authentication (API key handling)
+- Querying live systems vs reading static files
+- Debugging real system behavior
+
+**Benchmark:** ~15 wiki (Class A) + ~11 system (Class B + C) questions.
+
+### Task 3 — Pass the Benchmark
+
+**Goal:** Pass the full benchmark including hidden chain-of-tool and reasoning questions.
+
+**Narrative:** "Your agent works for docs and basic system queries. Now it faces harder questions — diagnosing bugs from logs, chaining multiple tools, and reasoning about the system."
+
+**What students build:**
+- Improved prompts for multi-step reasoning
+- Handling of log data (errors, tracebacks)
+- Robust tool error handling
+- Edge case fixes from benchmark iteration
+
+**What students learn:**
+- Prompt engineering through iteration
+- Multi-step agent reasoning (logs → source → diagnosis)
+- That agent quality comes from iteration, not writing code once
+- Debugging agent behavior systematically
+
+**Benchmark:** All local questions + hidden questions (Class D: log chains, Class E: LLM-judged).
+
+**Planted bugs:** 2-3 non-critical bugs in the backend that produce log entries. The agent must find, trace, and diagnose them.
 
 ---
 
-## 12. Student Workflow
+## 9. Evaluation System
 
-### 12.1 Development cycle
-
-```
-1. Write/modify agent code
-         │
-         ▼
-2. Test locally
-   python agent.py "..."
-         │
-         ▼
-3. Examine output — is the answer correct?
-   ├── Yes → try another question
-   └── No → debug:
-       ├── LLM gave wrong answer → fix system prompt
-       ├── Tool wasn't called → fix tool description
-       ├── Tool returned error → fix tool implementation
-       └── Tool called but wrong args → improve prompt/schema
-         │
-         ▼
-4. Push code, run autochecker (via Telegram bot or manually)
-         │
-         ▼
-5. See eval results:
-   ✅ green = passed (examine to learn)
-   ❌ red = failed (target for next fix)
-         │
-         ▼
-6. Pick one failed question → go to step 1
-```
-
-### 12.2 What happens where
-
-| Action | Where | Who/What does it |
-|--------|-------|-----------------|
-| Edit agent code | Student's laptop / VM | Student (can use AI assistant to plan) |
-| Test agent locally | Student's VM | Student runs `python agent.py "..."` |
-| Deploy/commit code | Student's VM / GitHub | Student pushes to repo |
-| Run eval | Student's VM (via SSH) | Autochecker SSHes in, runs agent |
-| View results | Telegram bot / dashboard | Student reads pass/fail output |
-| Fix issues | Student's laptop / VM | Student iterates |
-
-### 12.3 What the student does manually vs what the agent does
-
-| Activity | Done by |
-|----------|---------|
-| Writing the agent code | Student (may use AI coding assistant) |
-| Choosing tools to implement | Student |
-| Writing the system prompt | Student |
-| Defining tool schemas | Student |
-| Running the agent | Autochecker (via SSH) |
-| Calling the LLM | The agent (student's code) |
-| Selecting which tool to call | The LLM (via function calling) |
-| Executing the tool | The agent (student's code) |
-| Interpreting tool results | The LLM |
-| Producing the final answer | The LLM |
-| Evaluating the answer | Autochecker |
-| Debugging failures | Student |
-| Improving prompts | Student |
-
-### 12.4 `run_eval.py` — the primary iteration tool
-
-Students iterate using the shipped `run_eval.py` script:
-
-```bash
-python run_eval.py
-```
-
-The script reads autochecker credentials from `.env` / `.env.docker.secret`,
-fetches 25 questions one at a time from the API, runs the agent locally,
-and evaluates answers. Stops at the first failure with diagnostic output.
-
-This replaces manual question-by-question testing. Students also write
-regression tests (unit tests for tools, subprocess tests for the full agent)
-to catch regressions as they iterate.
-
----
-
-## 13. Evaluation System
-
-### 13.1 Two evaluation paths
+### 9.1 Two evaluation paths
 
 | | Local eval (`run_eval.py`) | Bot eval (autochecker SSH) |
 |--|---------------------------|---------------------------|
 | **Triggered by** | Student runs locally | Student sends `/check` in Telegram |
-| **Questions** | 25 (from API) | 34 (25 shared + 9 bot-only) |
+| **Questions** | ~26 (from API) | ~26 + ~13-17 hidden |
 | **Where agent runs** | Student's machine | Student's VM (via SSH) |
-| **Matching logic** | In `run_eval.py` (shipped with repo) | In autochecker |
-| **Display** | Passes shown green, stop at first fail | Same |
+| **Matching logic** | In `run_eval.py` (shipped with repo) | In autochecker engine |
+| **Display** | Green pass, stop at first fail | Same |
 | **Purpose** | Fast iteration | Grading |
 
-### 13.2 Local eval API endpoint
+### 9.2 Matching strategies
 
-Students iterate locally using `run_eval.py`, which fetches questions
-from the autochecker API one at a time.
-
-**Auth:** Same credentials as lab 5 (`AUTOCHECKER_EMAIL` / `AUTOCHECKER_PASSWORD`).
-Students already have these configured in `.env`.
-
-```
-GET /api/eval/question
-  Auth: Basic <base64(email:password)>
-  Query: ?lab=lab-06&index=0
-  →
-  {
-    "index": 0,
-    "total": 25,
-    "question": "What does REST stand for?",
-    "expected": {"contains": "Representational State Transfer"}
-  }
-```
-
-- Returns question + expected answer for the given index.
-- `expected` contains the matching rule — the script evaluates locally.
-- Returns `404` if index >= total.
-- Server logs every request: student email, timestamp, question index.
-
-**Matching strategies** (implemented in `run_eval.py`):
-
-| Strategy | Rule | Example |
+| Strategy | Rule | Used by |
 |----------|------|---------|
-| `contains` | Answer contains substring (case-insensitive) | `{"contains": "FastAPI"}` |
-| `contains_all` | Answer contains all substrings | `{"contains_all": ["Extract", "Transform", "Load"]}` |
-| `any_of` | Answer contains any substring | `{"any_of": ["PUT", "put"]}` |
-| `regex` | Answer matches pattern | `{"regex": "\\b40[14]\\b"}` |
-| `numeric_gt` | Answer contains number > N | `{"numeric_gt": 0}` |
-| `numeric_range` | Answer contains number in [min, max] | `{"numeric_range": [0, 100]}` |
+| `source_match` | `source` field matches expected section path | Class A |
+| `contains` | Answer contains substring (case-insensitive) | Class B |
+| `contains_all` | Answer contains all substrings | Class B |
+| `any_of` | Answer contains any substring | Class B |
+| `regex` | Answer matches pattern | Class B |
+| `numeric_gt` | Answer contains number > N | Class C |
+| `numeric_range` | Answer contains number in [min, max] | Class C |
+| `tool_chain` | `tool_calls` includes expected sequence of tool names | Class D |
+| `llm_judge` | LLM evaluates answer against rubric | Class E |
 
-**`run_eval.py` loop** (ships with the repo, ~50 lines):
+### 9.3 Anti-gaming
 
-```
-login with AUTOCHECKER_EMAIL / AUTOCHECKER_PASSWORD → token
-index = 0
+- Task 1 answers are deterministic — hardcoding is visible (student must have wiki files).
+- Hidden questions include multi-tool chains that can't be hardcoded.
+- LLM judge for open-ended hidden questions makes hardcoding impractical.
+- Tool call verification ensures the agent actually used tools (not just returned a string).
+- Every API request is logged (student email, timestamp, question index).
 
-loop:
-  resp = GET /api/eval/question?lab=lab-06&index={index}
-  if 404 → print "25/25 PASSED", exit
+### 9.4 `run_eval.py`
 
-  output = subprocess: python agent.py "{resp.question}"
-  parse JSON from stdout
+Ships with the repo. Fetches questions from autochecker API, runs agent locally, evaluates. Stop-at-first-failure.
 
-  if matches(output.answer, resp.expected):
-    print green: ✅ {resp.question}
-    index += 1
-  else:
-    print red:  ❌ {resp.question}
-                   Your answer: {output.answer}
-                   Expected: {resp.expected}
-    exit
-```
-
-### 13.3 Bot SSH eval (grading)
-
-The autochecker bot SSHes into the VM, runs the agent, and evaluates.
-Same stop-at-first-failure display. Uses 34 questions (25 shared + 9 extras).
-
-```
-SSH → cd ~/se-toolkit-lab-6 && python agent.py "..."
-```
-
-The 9 extra questions are never served by the API — students can only
-encounter them through the bot. This prevents hard-coding answers.
-
-**Display:**
-
-```
-Agent Evaluation: 25/34 passed
-
-  ✅ What does REST stand for?
-  ✅ What does ETL stand for?
-  ✅ ...
-  (24 more green)
-
-  ❌ What is the average score for lab-04?
-     Your answer: "I don't have access to the database"
-     Expected: a number in range [0, 100]
-
-Fix this question and re-run.
-```
-
-### 13.4 Logging
-
-Every `/api/eval/question` request is logged:
-- Student email
-- Timestamp
-- Question index
-- Lab identifier
-
-This gives us: progress per student, which questions are hardest
-(highest index where students get stuck), iteration frequency.
-
----
-
-## 14. Spec Structure (lab-06.yaml outline)
-
-```yaml
-tasks:
-  - id: setup
-    title: "Lab setup"
-  - id: task-1
-    title: "Task 1: Basic Agent Loop"
-    prerequisite: setup
-  - id: task-2
-    title: "Task 2: Add Tools"
-    prerequisite: task-1
-  - id: task-3
-    title: "Task 3: Pass the Benchmark"
-    prerequisite: task-2
-
-checks:
-  # SETUP
-  - repo_exists, repo_is_fork, repo_has_issues
-  - ssh_connectivity (reuse from lab 5)
-  - lab5_api_reachable (GET /docs returns 200)
-  - lab5_has_data (GET /items/ returns non-empty with auth)
-
-  # TASK 1
-  - task1_issue_exists
-  - task1_agent_cli_runs (SSH: python agent.py "hello" exits 0)
-  - task1_output_valid_json (output has "answer" and "tool_calls" keys)
-  - task1_basic_eval (tier 1 questions, ≥8/15)
-  - task1_commit
-  - task1_issue_has_linked_pr
-  - task1_pr_approved
-
-  # TASK 2
-  - task2_issue_exists
-  - task2_has_tools (read_file, list_files, query_api in code)
-  - task2_tool_eval (tier 2 questions, ≥7/12)
-  - task2_commit
-  - task2_issue_has_linked_pr
-  - task2_pr_approved
-
-  # TASK 3
-  - task3_issue_exists
-  - task3_full_eval (all questions, ≥26/34)
-  - task3_commit
-  - task3_issue_has_linked_pr
-  - task3_pr_approved
+```bash
+python run_eval.py           # run all questions sequentially
+python run_eval.py --index 5 # test a single question (for debugging)
 ```
 
 ---
 
-## 15. Decisions Made
+## 10. Wiki Requirements
+
+Task 1 depends on a comprehensive wiki. The wiki must cover:
+
+| Topic | Lab | Suggested wiki file |
+|-------|-----|-------------------|
+| Git workflow | 1 | `wiki/git-workflow.md` |
+| Branching, PRs, reviews | 1 | `wiki/git-workflow.md` |
+| Backend basics, FastAPI | 2 | `wiki/backend.md` |
+| Docker, Compose, volumes | 2 | `wiki/docker.md` |
+| REST API, HTTP methods | 3 | `wiki/rest-api.md` |
+| Database, SQL, ORM | 3 | `wiki/database.md` |
+| Authentication, security | 3 | `wiki/security.md` |
+| Testing, pytest | 4 | `wiki/testing.md` |
+| Frontend, React | 4 | `wiki/frontend.md` |
+| ETL, data pipelines | 5 | `wiki/etl.md` |
+| Analytics, SQL aggregation | 5 | `wiki/analytics.md` |
+| Agents, tool calling | 6 | `wiki/agents.md` |
+
+**Action needed:** Audit existing wiki content, identify gaps, write missing sections.
+
+---
+
+## 11. Planted Bugs (Task 3)
+
+Non-critical bugs in the backend that produce log entries but don't break functionality.
+
+| # | Bug | File | Log output | Trigger |
+|---|-----|------|-----------|---------|
+| 1 | Division by zero when a group has no submissions | `analytics.py` | `ZeroDivisionError` caught, logged | GET `/analytics/scores?group=empty-group` |
+| 2 | Unclosed resource warning in ETL edge case | `etl.py` | `ResourceWarning` logged | POST `/pipeline/sync` with empty response |
+| 3 | Config type mismatch (string timeout) | `config.py` | `TypeError` caught, logged | Any request after startup |
+
+These bugs must:
+- Not break existing lab 5 functionality or autochecker checks.
+- Produce visible log entries that the agent can find.
+- Be diagnosable by reading the source code.
+- Have clear fixes that the agent can suggest.
+
+---
+
+## 12. Decisions Made
 
 | # | Question | Decision |
 |---|----------|----------|
 | 1 | Starter `agent.py` skeleton? | **No** — students build from scratch, plan first |
-| 2 | Eval set versioned / rotated? | No for v1 — one fixed set |
-| 3 | LLM rate limiting during eval? | Retry with backoff, count timeouts as fails |
-| 4 | Tool call verification strict or loose? | Loose — check tool was used, not exact args |
-| 5 | `query_db` (direct SQL) tool? | **No** — `query_api` is sufficient and safer |
-| 6 | Max agent loop iterations? | **10** tool calls per question |
-| 7 | Share example questions? | Not decided yet — leaning yes (small tier 1 sample) |
-| 8 | Lab repo name? | **`se-toolkit-lab-6`** — confirmed |
-| 9 | Agent code lives where? | **New repo** (`se-toolkit-lab-6`), not in lab 5 repo |
-| 10 | Time estimate? | ~5-6 hours — not yet validated |
-| 11 | Input format? | **Plain string argument** (`python agent.py "..."`) — not JSON |
-| 12 | API key naming? | **`LMS_API_KEY`** (backend) vs **`LLM_API_KEY`** (LLM provider) |
-| 13 | LLM config file? | **`.env.agent.secret`** (gitignored), with `.env.agent.example` committed |
-| 14 | Task format? | **Deliverable-focused** (WHAT not HOW), 5 deliverables per task |
+| 2 | LLM setup when? | **Setup task** — verify tool calling before graded work |
+| 3 | Model recommendation? | **Strong models first** — Llama 4 Scout, Llama 3.3 70B, Qwen 2.5 72B |
+| 4 | Task 1 approach? | **Wiki lookup** — deterministic, verifiable, teaches tools from day one |
+| 5 | Task 1 output? | **Answer + source** — source is deterministic, answer shows understanding |
+| 6 | Tool call verification? | Loose — check tool was used, not exact args |
+| 7 | Max agent loop iterations? | **10** tool calls per question |
+| 8 | How to handle non-deterministic system questions? | Static facts (deterministic) + range checks for data-dependent |
+| 9 | How to prevent hardcoding? | Hidden chain-of-tool questions + LLM judge for reasoning |
+| 10 | Input format? | **Plain string argument** (`python agent.py "..."`) |
+| 11 | API key naming? | **`LMS_API_KEY`** (backend) vs **`LLM_API_KEY`** (LLM provider) |
+| 12 | LLM config file? | **`.env.agent.secret`** (gitignored), with `.env.agent.example` committed |
+| 13 | Planted bugs for Task 3? | **Yes** — 2-3 non-critical bugs producing log entries |
+| 14 | LLM judge for hidden questions? | **Yes** — budget ~$3 total for 60 students |
+| 15 | `run_eval.py` features? | Add `--index N` flag for single-question debugging |
 
-## 16. Remaining Work
+---
 
-- [x] Write Task 1 (Basic Agent Loop) — `lab/tasks/required/task-1.md`
-- [x] Write Task 2 (Add Tools) — `lab/tasks/required/task-2.md`
-- [x] Write Task 3 (Pass the Benchmark) — `lab/tasks/required/task-3.md`
-- [x] Create question bank YAML v2 (`autochecker/specs/lab-06-eval.yaml`)
-- [x] Implement eval API endpoint (`GET /api/eval/question` in dashboard)
-- [x] Implement `run_eval.py` (shipped in lab repo)
-- [x] Update README with lab story and learning advice
-- [x] Deploy autochecker with eval endpoint
-- [x] Create autochecker spec (`autochecker/specs/lab-06.yaml`)
-- [x] Implement `agent_eval` check type in autochecker engine
-- [x] Clean up old lab 5 content from `optional/task-1.md`
-- [x] Update `instructors/lab-plan.md` in submodule to match final design
+## 13. Remaining Work
+
+- [ ] Audit existing wiki content — what's there, what's missing
+- [ ] Write missing wiki sections (labs 1-6 material)
+- [ ] Rewrite Task 1 (`task-1.md`) — documentation agent
+- [ ] Rewrite Task 2 (`task-2.md`) — system agent
+- [ ] Rewrite Task 3 (`task-3.md`) — pass the benchmark (with planted bugs)
+- [ ] Update setup task — add LLM setup and verification script
+- [ ] Create verification script (`verify_llm.py`)
+- [ ] Write Class A questions (wiki lookup, ~20)
+- [ ] Write Class B questions (static system facts, ~11)
+- [ ] Write Class C questions (data-dependent queries, ~5)
+- [ ] Write Class D questions (log analysis chains, ~5)
+- [ ] Write Class E questions (LLM-judged reasoning, ~5)
+- [ ] Implement planted bugs in backend
+- [ ] Add `source_match` check to `run_eval.py` and engine
+- [ ] Add `tool_chain` check to engine
+- [ ] Add `llm_judge` check to engine (with budget control)
+- [ ] Update autochecker spec (`lab-06.yaml`)
+- [ ] Update `run_eval.py` with `--index` flag
+- [ ] Update README and lab-plan to match v2 design
+- [ ] Update optional task
