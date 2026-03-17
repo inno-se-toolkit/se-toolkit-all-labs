@@ -3,33 +3,47 @@
 
 Usage:
     python calculate.py \
-        --tasks tasks-lab03-lab04.csv \
-        --task-column lab04_obligatory_passed \
-        --attendance "S26-SET-L4-G1-attendance.csv" "S26-SET-L4-G2-attendance.csv" ... \
-        --output participation-lab04.csv \
+        --tasks autochecker-lab-05-2026-03-14.csv \
+        --task-columns task-1 task-2 \
+        --threshold 75 \
+        --attendance "Week 6/S26-SET-L5-G1-attendance.csv" ... \
+        --output participation-lab05.csv \
         [--cheaters AleksKornilov07 venimu]
 
 Scoring rules:
-    1    = attended AND obligatory_tasks_passed >= 2
-    0.5  = attended AND obligatory_tasks_passed == 1
-    0.5  = absent   AND obligatory_tasks_passed >= 2
-    0    = attended AND obligatory_tasks_passed == 0
-    0    = absent   AND obligatory_tasks_passed  < 2
-    0    = flagged as cheater (plagiarism detected, case to be filed to DoE)
+    1    = attended AND all required tasks >= threshold
+    0.5  = attended AND some (but not all) required tasks >= threshold
+    0.5  = absent   AND all required tasks >= threshold
+    0    = attended AND no required tasks >= threshold
+    0    = absent   AND not all required tasks >= threshold
+    0    = flagged as cheater
     ""   = non-student (no group in the tasks file)
 
 Input formats:
-    - Tasks CSV: columns must include github_alias, email, group, <task-column>
-      (exported from autochecker dashboard or prepared manually)
+    - Tasks CSV: autochecker dashboard export with columns like
+      "100.0% (9/9)" or just a number. Script parses percentage from the value.
     - Attendance CSVs: columns "External user field" (email) and "status" (P = present)
-      (exported from Moodle / attendance tracking tool)
 """
 
 import argparse
 import csv
+import re
 import sys
 from collections import Counter
 from pathlib import Path
+
+
+def _parse_pct(value: str) -> float:
+    """Extract percentage from strings like '100.0% (9/9)' or '85.7% (6/7)' or ''."""
+    if not value or not value.strip():
+        return 0.0
+    m = re.match(r"([\d.]+)%", value.strip())
+    if m:
+        return float(m.group(1))
+    try:
+        return float(value.strip())
+    except ValueError:
+        return 0.0
 
 
 def load_attendance(files: list[str]) -> set[str]:
@@ -47,7 +61,8 @@ def load_attendance(files: list[str]) -> set[str]:
 
 def calculate_participation(
     tasks_file: str,
-    task_column: str,
+    task_columns: list[str],
+    threshold: float,
     attendance_files: list[str],
     cheaters: list[str] | None = None,
 ) -> tuple[list[dict], list[str]]:
@@ -59,7 +74,8 @@ def calculate_participation(
         reader = csv.DictReader(f)
         rows = list(reader)
 
-    out_fields = ["github_alias", "email", "group", task_column, "attended", "participation", "comment"]
+    required_count = len(task_columns)
+    out_fields = ["github_alias", "email", "group"] + task_columns + ["tasks_passed", "attended", "participation", "comment"]
     out_rows = []
 
     for row in rows:
@@ -67,42 +83,53 @@ def calculate_participation(
         group = (row.get("group") or "").strip()
         alias = row.get("github_alias", "")
         attended = email in attended_emails
-        tasks_passed = int(row.get(task_column, 0))
+
+        # Count how many required tasks meet the threshold
+        task_pcts = []
+        tasks_passed = 0
+        for col in task_columns:
+            pct = _parse_pct(row.get(col, ""))
+            task_pcts.append(pct)
+            if pct >= threshold:
+                tasks_passed += 1
 
         att = "YES" if attended else "NO"
 
         if not group:
             part, comment = "", "non-student"
         elif alias in cheater_set:
-            part, comment = "0", "plagiarism detected, case to be filed to DoE"
-        elif attended and tasks_passed >= 2:
+            part, comment = "0", "plagiarism detected"
+        elif attended and tasks_passed >= required_count:
             part = "1"
-            comment = f"attended + {tasks_passed} tasks done (>=2)"
+            comment = f"attended + {tasks_passed}/{required_count} tasks passed"
         elif attended and tasks_passed >= 1:
             part = "0.5"
-            comment = f"attended but only {tasks_passed} task done (<2)"
-        elif not attended and tasks_passed >= 2:
+            comment = f"attended but only {tasks_passed}/{required_count} tasks passed"
+        elif not attended and tasks_passed >= required_count:
             part = "0.5"
-            comment = f"absent but {tasks_passed} tasks done (>=2)"
+            comment = f"absent but {tasks_passed}/{required_count} tasks passed"
         elif attended and tasks_passed == 0:
             part = "0"
-            comment = "attended but 0 tasks done"
+            comment = f"attended but 0/{required_count} tasks passed"
         elif not attended and tasks_passed >= 1:
             part = "0"
-            comment = f"absent + only {tasks_passed} task done"
+            comment = f"absent + only {tasks_passed}/{required_count} tasks passed"
         else:
             part = "0"
-            comment = "absent + 0 tasks done"
+            comment = f"absent + 0/{required_count} tasks passed"
 
-        out_rows.append({
+        out_row = {
             "github_alias": alias,
             "email": row.get("email", ""),
             "group": row.get("group", ""),
-            task_column: str(tasks_passed),
+            "tasks_passed": str(tasks_passed),
             "attended": att,
             "participation": part,
             "comment": comment,
-        })
+        }
+        for col in task_columns:
+            out_row[col] = row.get(col, "")
+        out_rows.append(out_row)
 
     return out_rows, out_fields
 
@@ -134,8 +161,9 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
-    parser.add_argument("--tasks", required=True, help="Path to tasks CSV (autochecker export)")
-    parser.add_argument("--task-column", required=True, help="Column name for obligatory tasks passed count")
+    parser.add_argument("--tasks", required=True, help="Path to autochecker CSV export")
+    parser.add_argument("--task-columns", required=True, nargs="+", help="Task columns to check (e.g., task-1 task-2)")
+    parser.add_argument("--threshold", type=float, default=75, help="Minimum percentage to pass a task (default: 75)")
     parser.add_argument("--attendance", required=True, nargs="+", help="Attendance CSV files (Moodle export)")
     parser.add_argument("--output", required=True, help="Output CSV path")
     parser.add_argument("--cheaters", nargs="*", default=[], help="GitHub aliases to flag as plagiarism")
@@ -143,7 +171,8 @@ def main():
 
     rows, fields = calculate_participation(
         tasks_file=args.tasks,
-        task_column=args.task_column,
+        task_columns=args.task_columns,
+        threshold=args.threshold,
         attendance_files=args.attendance,
         cheaters=args.cheaters,
     )
