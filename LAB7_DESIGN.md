@@ -12,9 +12,13 @@ a working product connected to a real backend.
 ## Prerequisites
 
 - Labs 2–6 completed (backend deployed on VM with PostgreSQL, ETL, analytics)
-- Student's LMS backend running at `http://<VM_IP>:8000`
+- Student's LMS backend running on VM (port 42002 via Caddy, or 8000 direct)
 - Working API key for the backend (`LMS_API_KEY`)
 - Telegram bot token (from @BotFather)
+
+> **Base repo:** Lab 7 forks from `se-toolkit-lab-6`. Students get the
+> working backend + frontend + Docker Compose as their starting point.
+> They add the Telegram bot as a new service on top of it.
 
 ### SSH Setup (carried over from Lab 6 Task 3)
 
@@ -92,7 +96,8 @@ run `whoami`, reply to the bot).
 
 ### P1 — Should Have
 
-1. `/ask <question>` — answers questions about the LMS using an LLM
+1. Natural language intent routing — plain text messages (no `/` prefix)
+   are interpreted by an LLM that picks the right tools/actions
 2. Inline keyboard buttons or reply menu for main commands
 3. Periodic health check (configurable interval, logs or sends alert on failure)
 4. Graceful error handling (backend down → user-friendly message, not crash)
@@ -100,9 +105,9 @@ run `whoami`, reply to the bot).
 ### P2 — Nice to Have
 
 1. Rich message formatting (tables, charts as images)
-2. Admin-only commands (e.g., trigger ETL sync, view system stats)
+2. Multi-step reasoning (bot chains multiple API calls to answer one question)
 3. Response caching for expensive queries
-4. Conversation context for `/ask` (multi-turn)
+4. Conversation context (multi-turn)
 
 ---
 
@@ -110,22 +115,37 @@ run `whoami`, reply to the bot).
 
 ### Setup
 
-**Goal:** Ensure the student's VM is reachable, the repo exists, and the
-backend is running. Same pattern as Labs 2–6 setup tasks.
+**Goal:** Ensure the student's VM is reachable, the repo is forked, the
+backend is deployed and running, and the database has data (ETL synced).
+Mirrors Lab 6 setup checks + deployment + sync.
 
 **What students do:**
-1. Ensure SSH key is in `~/.ssh/authorized_keys` (from Lab 6 Task 3)
-2. Register `vm_username` with the bot (if not already done)
-3. Create the lab repo on GitHub
-4. Confirm their LMS backend is running on the VM
+1. Fork the lab-7 template repo on GitHub
+2. Enable GitHub Issues on the fork
+3. Ensure SSH key is in `~/.ssh/authorized_keys` (from Lab 6 Task 3)
+4. Register `vm_username` with the bot (if not already done)
+5. Clone the repo on their VM
+6. Copy `.env.docker.example` → `.env.docker.secret`, fill in credentials
+7. Run `docker compose up -d` to deploy backend + frontend + database
+8. Trigger ETL sync: `POST /pipeline/sync` via Swagger UI or curl
+   (this populates the database with labs, tasks, learners, and interactions
+   from the autochecker API — without this, all analytics endpoints return empty)
+9. Verify the dashboard shows data at `http://<VM_IP>:42002`
 
-**Auto-checks:**
+**Auto-checks (reused from Lab 6):**
 
 | ID | Check | Channel | How |
 |----|-------|---------|-----|
-| setup-repo | Repository exists on GitHub | GitHub | repo_exists |
-| setup-ssh | SSH connectivity — can log in as student's main user | SSH | `echo ok` via SSH as `vm_username` |
-| setup-backend | LMS backend is running | SSH | `curl -sf http://localhost:8000/items` returns 200 |
+| setup-repo | Repository exists on GitHub | GitHub | `repo_exists` |
+| setup-fork | Repository is a fork of the template | GitHub | `repo_is_fork` |
+| setup-issues | GitHub Issues are enabled | GitHub | `repo_has_issues` |
+| setup-ssh | SSH connectivity as student's main user | SSH | `ssh_check` — `echo ok` as `vm_username` |
+| setup-backend | LMS backend is running | SSH | `ssh_check` — `curl -sf http://localhost:42002/docs` returns 200 |
+| setup-data | Database has data (ETL was synced) | SSH | `ssh_check` — `curl -sf -H 'Authorization: Bearer <key>' http://localhost:42002/items/` returns non-empty JSON array |
+
+> Setup checks are mostly identical to Lab 6. The new check (`setup-data`)
+> verifies the student ran the ETL sync. Without it, the bot's data
+> commands and intent routing will return empty results.
 
 ### Task 1 — Plan and Scaffold
 
@@ -192,38 +212,82 @@ backend is running. Same pattern as Labs 2–6 setup tasks.
 
 > `--test` mode hits the real backend on localhost. No mock needed.
 
-### Task 3 — Smart Interaction
+### Task 3 — Intent-Based Natural Language Routing
 
-**Goal:** Add an LLM-powered `/ask` command and interactive UX elements.
+**Goal:** The bot accepts plain text messages (no `/` prefix needed) and
+uses an LLM to determine the user's intent, pick the right backend tools,
+and compose a response. This is a mini-agent inside the bot.
 
 **What students do:**
-1. Implement `/ask <question>` that answers questions about the LMS data
-2. The `/ask` handler should fetch relevant backend data, then pass it
-   to an LLM with context for a natural language answer
-3. Add inline keyboard buttons or a reply keyboard for common commands
-4. (P1) Add periodic health check with configurable interval
+1. Define available "tools" — backend API endpoints the LLM can call
+2. Implement an intent router: user message → LLM decides which tools
+   to call → fetches data → formats response
+3. Add inline keyboard buttons or a reply keyboard for common actions
+4. Handle ambiguous and invalid inputs gracefully
 
-**How `/ask` works:**
+**How it works:**
 ```
-User: /ask which lab has the lowest pass rate?
-Bot:  → calls GET /analytics/pass-rates for each lab
-      → sends data + question to LLM (via OpenRouter or similar)
-      → returns formatted answer
+User: "which lab has the worst results?"
+Bot:  → sends message + tool definitions to LLM
+      → LLM decides: call GET /analytics/pass-rates for each lab
+      → bot executes the API calls
+      → LLM summarizes: "Lab 3 has the lowest average at 62%..."
+      → bot sends formatted response
 ```
 
-This connects to Lab 6 (LLM integration) — students reuse the pattern
-of "fetch data → build prompt → call LLM → format response."
+This directly builds on Lab 6 (tool use / function calling) — students
+reuse the pattern of giving an LLM a set of tools and letting it decide
+which to call. The difference: in Lab 6 they built the agent, here the
+agent is embedded inside a user-facing product.
+
+**Scenarios to cover:**
+
+*Direct data queries (single API call):*
+
+| User message | Intent | Tool |
+|---|---|---|
+| "what labs are available?" | list items | `GET /items` |
+| "how many students are enrolled?" | learner count | `GET /learners` |
+| "show me scores for lab 4" | score distribution | `GET /analytics/scores?lab=lab-04` |
+| "who are the top 5 students?" | leaderboard | `GET /analytics/top-learners?limit=5` |
+| "which group is doing best in lab 3?" | group comparison | `GET /analytics/groups?lab=lab-03` |
+
+*Multi-step reasoning (multiple API calls):*
+
+| User message | Intent | Tools |
+|---|---|---|
+| "which lab has the lowest pass rate?" | compare across labs | `GET /items` → `GET /analytics/pass-rates` per lab → compare |
+| "is the class improving over time?" | trend analysis | `GET /analytics/timeline` for recent labs → compare |
+| "compare group A and group B" | group diff | `GET /analytics/groups` → filter → compare |
+
+*System / meta:*
+
+| User message | Intent | Action |
+|---|---|---|
+| "is the backend running?" | health check | `GET /items` → 200 = ok |
+| "sync latest data" | trigger ETL | `POST /pipeline/sync` |
+| "what can you do?" | capabilities | No API call — list what bot can do |
+
+*Fallback / ambiguous:*
+
+| User message | Intent | Action |
+|---|---|---|
+| "hello" | greeting | Friendly response + hint about capabilities |
+| "lab 4" | ambiguous | Clarify: "What about lab 4? I can show scores, pass rates..." |
+| "asdfgh" | nonsense | "I didn't understand. Here's what I can help with..." |
 
 **Auto-checks:**
 
 | ID | Check | Channel | How |
 |----|-------|---------|-----|
-| t3-ask | `--test "/ask what labs are available"` returns non-empty answer (≥20 chars) | SSH | real LLM key + real backend from student's `.env` |
-| t3-buttons | Source code contains keyboard/button setup (InlineKeyboardMarkup, ReplyKeyboardMarkup, or equivalent) | GitHub | regex_in_file |
-| t3-ask-data | `/ask` handler fetches from backend before calling LLM (not pure LLM) | GitHub | regex_in_file — look for API call in ask handler |
+| t3-intent | `--test "what labs are available"` (no `/` prefix) returns non-empty answer (≥20 chars) | SSH | real LLM key + real backend |
+| t3-multi | `--test "which lab has the lowest pass rate"` returns answer mentioning a lab name | SSH | regex for `lab-\d+` or lab title in stdout |
+| t3-fallback | `--test "asdfgh"` returns a helpful message, not a crash or empty response | SSH | stdout non-empty, no `Traceback` |
+| t3-buttons | Source code contains keyboard/button setup | GitHub | regex_in_file — `InlineKeyboardMarkup\|ReplyKeyboardMarkup` or equivalent |
+| t3-tools | Source code defines tool/function schemas for the LLM | GitHub | regex_in_file — `tools\|functions\|function_call` pattern |
 
-> `/ask` runs with the student's own `.env` on their VM. If the key is
-> missing or expired, the check fails — student's responsibility.
+> Intent-based checks run with the student's own `.env` on their VM
+> (real LLM key + real backend). If the key is missing, check fails.
 
 ### Task 4 — Deploy and Document
 
@@ -248,9 +312,10 @@ of "fetch data → build prompt → call LLM → format response."
 **TA verification (demo):**
 - Bot responds to `/start`, `/help`, `/health` in Telegram
 - At least 2 data commands return real backend data
-- `/ask` returns a meaningful answer
+- Plain text questions get routed correctly (intent detection works)
+- Multi-step query produces a coherent answer
 - Student explains how they used Qwen Code during development
-- Student can explain the handler architecture
+- Student can explain the handler + intent routing architecture
 
 ---
 
@@ -262,9 +327,9 @@ of "fetch data → build prompt → call LLM → format response."
 
 **SSH as student's main user** — runtime & deployment checks on the VM:
 
-**Setup (3 checks)**
-- GitHub: repo exists
-- SSH: connectivity (prerequisite for all SSH checks), backend running
+**Setup (6 checks) — reused from Lab 6 + data check**
+- GitHub: repo exists, is fork, issues enabled
+- SSH: connectivity, backend running, database has data (ETL synced)
 
 **Task 1 — Structure & Scaffold (7 checks)**
 - GitHub: PLAN.md, .env.example, README.md, deps file, handler module
@@ -276,23 +341,24 @@ of "fetch data → build prompt → call LLM → format response."
 - SSH: 2 data commands return output (real backend data)
 - SSH: error handling (no traceback on failure)
 
-**Task 3 — Smart Features (3 checks)**
-- SSH: /ask returns non-empty answer (real LLM key from student's .env)
-- GitHub: button/keyboard code exists, /ask handler includes API fetch
+**Task 3 — Intent Routing (5 checks)**
+- SSH: plain text query returns answer, multi-step query works, fallback works
+- GitHub: button/keyboard code exists, tool/function schemas defined
 
 **Task 4 — Deployment (5 checks)**
 - SSH: repo integrity — deployed code matches student's GitHub repo
 - SSH: compose file has bot service, bot container running, backend healthy
 - GitHub: README has deploy section
 
-**Total: ~24 auto-checks (3 setup + 7 + 6 + 3 + 5)**
+**Total: ~29 auto-checks (6 setup + 7 + 6 + 5 + 5)**
 
 ### TA-Verified (demo)
 
 - Live Telegram interaction
 - Real backend data flowing through bot
-- `/ask` quality and relevance
-- Code walkthrough: handler architecture
+- Plain text intent routing quality and relevance
+- Multi-step reasoning demo (e.g., "which lab has the lowest pass rate?")
+- Code walkthrough: handler + intent routing architecture
 - Development process: how Qwen Code was used
 - Interaction quality and usability
 
@@ -304,14 +370,18 @@ The bot must support a `--test` flag for offline command verification:
 
 ```bash
 # Syntax
-python bot.py --test "<command> [args]"
+python bot.py --test "<message>"
 
-# Examples
+# Slash commands
 python bot.py --test "/start"
 python bot.py --test "/help"
 python bot.py --test "/health"
 python bot.py --test "/labs"
-python bot.py --test "/ask what labs are available"
+
+# Natural language (intent routing)
+python bot.py --test "what labs are available"
+python bot.py --test "which lab has the lowest pass rate"
+python bot.py --test "asdfgh"
 ```
 
 **Behavior:**
@@ -319,7 +389,8 @@ python bot.py --test "/ask what labs are available"
 - Hits the **real backend on localhost** (reads `LMS_API_URL` from `.env`)
 - Exits with code **0** on success, **non-zero** on error
 - Does NOT connect to Telegram (no `BOT_TOKEN` required)
-- LLM-dependent commands (`/ask`) use the real `OPENROUTER_API_KEY` from `.env`
+- LLM-dependent messages use the real `OPENROUTER_API_KEY` from `.env`
+- Messages without `/` prefix go through the intent router (Task 3)
 
 **Why this matters:**
 - Autochecker can verify handler logic without Telegram
@@ -351,10 +422,11 @@ if __name__ == "__main__":
 ```
 bot.py              ← entry point (Telegram startup OR --test mode)
 handlers/
-  start.py          ← /start, /help
-  health.py         ← /health, periodic check
-  data.py           ← /labs, /scores, /top, etc.
-  ask.py            ← /ask (LLM-powered)
+  commands.py       ← /start, /help, /health, /labs, etc.
+  intent.py         ← natural language router (LLM picks tools)
+tools/
+  api.py            ← tool definitions for LLM (get_items, get_scores, etc.)
+  registry.py       ← tool registry mapping names → functions
 services/
   api_client.py     ← HTTP client for LMS backend
   llm.py            ← LLM integration (OpenRouter)
@@ -363,12 +435,14 @@ config.py           ← env var loading
 requirements.txt
 README.md
 PLAN.md
-docker-compose.yml  ← or added to existing compose
-Dockerfile
+Dockerfile          ← bot container
 ```
 
-Students don't have to follow this exactly — it's a suggestion. The only
-hard requirement is that handlers are testable without Telegram.
+Students don't have to follow this exactly — it's a suggestion. The key
+requirements are:
+- Handlers testable without Telegram (via `--test` mode)
+- Intent router uses tool/function definitions the LLM can choose from
+- Slash commands and plain text both work
 
 ---
 
@@ -377,11 +451,48 @@ hard requirement is that handlers are testable without Telegram.
 | Task | Weight | Notes |
 |------|--------|-------|
 | Task 1 — Plan & Scaffold | 20% | Mostly structural checks |
-| Task 2 — Backend Integration | 35% | Core functionality |
-| Task 3 — Smart Features | 25% | /ask + UX |
+| Task 2 — Backend Integration | 30% | Core functionality |
+| Task 3 — Intent Routing | 30% | LLM tool use + natural language |
 | Task 4 — Deploy & Document | 20% | Deployment + README |
 
 Pass threshold: 75% (consistent with other labs)
+
+---
+
+## Reuse from Lab 6
+
+Lab 7 forks `se-toolkit-lab-6`. Here's what carries over and what changes.
+
+**Reused as-is (check types + engine methods):**
+- `repo_exists`, `repo_is_fork`, `repo_has_issues` — standard GitHub checks
+- `ssh_check` — SSH connectivity and command execution via `vm_username`
+  (routes internal 10.x IPs through relay, public IPs direct)
+- `glob_exists` — file pattern matching on GitHub
+- `regex_in_file` — code pattern validation on GitHub
+- `file_word_count`, `file_nonempty` — content checks on GitHub
+- Scoring config: `mode: weighted`, `pass_threshold: 0.75`, `score_required_only: true`
+- Task prerequisites: all tasks depend on `setup`
+- `depends_on` between checks (e.g., `backend_running` depends on `ssh_connectivity`)
+
+**Reused with modifications:**
+- `backend_running` — same `ssh_check` type, update port to 42002 and path to `/docs`
+- `.env.example` regex check — different env vars: `BOT_TOKEN`, `LMS_API_URL`,
+  `LMS_API_KEY`, `OPENROUTER_API_KEY` (vs Lab 6's `LLM_API_KEY`, `LLM_API_BASE`)
+- `glob_exists` for required files — different file list (PLAN.md, handlers/,
+  bot.py vs Lab 6's agent.py, AGENT.md)
+
+**Not reused (Lab 6 specific):**
+- `agent_eval` check type (Docker sandbox eval with question bank)
+- `issue_pr_approved` (PR approval workflow — TBD for Lab 7)
+- `clone_and_run` (replaced by SSH-only checks)
+- `task1_reads_env_vars` checking for `LLM_API_KEY` in `agent.py`
+- `task2_agent_tools` checking for `read_file`/`list_files`
+
+**New for Lab 7:**
+- SSH-based `--test` command execution (run `python bot.py --test "..."`,
+  check stdout) — uses `ssh_check` with custom commands
+- Repo integrity check (`git remote get-url origin` via SSH)
+- Intent routing checks (plain text → LLM → tool calls → response)
 
 ---
 
@@ -400,6 +511,10 @@ Pass threshold: 75% (consistent with other labs)
 
 ## Resolved Decisions
 
+- **Base repo:** Fork from `se-toolkit-lab-6`. Students get working backend
+  + frontend + Docker Compose. They add the bot on top.
+- **Setup checks:** Reuse Lab 6's `repo_exists`, `repo_is_fork`,
+  `repo_has_issues`, `ssh_check`, `backend_running` — same engine methods.
 - **Verification model:** GitHub API for structural checks, SSH for runtime.
   No `clone_and_run`. No `autochecker` SSH user.
 - **SSH user:** Always SSH as the student's main user (`vm_username`).
@@ -408,9 +523,11 @@ Pass threshold: 75% (consistent with other labs)
   student's known GitHub alias + repo name. Prevents deploying others' code.
 - **Mock client:** Not needed. Checks run on the student's VM where the
   real backend is on localhost. `--test` mode hits the real API.
+- **Env vars:** Different from Lab 6. Lab 7 needs `BOT_TOKEN`, `LMS_API_URL`,
+  `LMS_API_KEY`, `OPENROUTER_API_KEY` (Lab 6 had `LLM_API_KEY`, `LLM_API_BASE`).
 - **LLM API key:** Runs with student's own `.env` on their VM. If key is
   missing, check fails — student's responsibility.
 - **Docker network:** Single compose file with bot + backend on the same
   network. Bot reaches backend via Docker service name.
-- **Project directory:** Convention `~/lab-07-*` or repo name from spec.
+- **Project directory:** Convention `~/se-toolkit-lab-7` (same as repo name).
   Fallback: search home dir for entry point with `--test` flag.
