@@ -16,6 +16,27 @@ a working product connected to a real backend.
 - Working API key for the backend (`LMS_API_KEY`)
 - Telegram bot token (from @BotFather)
 
+### SSH Setup (carried over from Lab 6 Task 3)
+
+In Lab 6 Task 3, students added the autochecker SSH public key to their
+**own user's** `~/.ssh/authorized_keys` and registered their `vm_username`
+with the bot. Lab 7 relies on this same setup — the autochecker SSHes as
+the student's main user for all runtime checks.
+
+**Lab 7 setup must verify this is still in place.** If a student skipped
+Lab 6 Task 3 or reinstalled their VM, they need to redo it:
+
+```bash
+# On their VM, as their main user:
+mkdir -p ~/.ssh
+echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKiL0DDQZw7L0Uf1c9cNlREY7IS6ZkIbGVWNsClqGNCZ se-toolkit-autochecker' >> ~/.ssh/authorized_keys
+chmod 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys
+```
+
+The bot already stores `vm_username` from Lab 6. If missing, the lab setup
+task should prompt the student to register it (same flow as Lab 6 Task 3:
+run `whoami`, reply to the bot).
+
 ## Learning Outcomes
 
 1. Use an AI coding agent to plan and implement a client application
@@ -23,6 +44,36 @@ a working product connected to a real backend.
 3. Connect a client to an existing REST API with authentication
 4. Debug integration issues iteratively with agent assistance
 5. Deploy a multi-service system (backend + bot) on a remote VM
+
+---
+
+## Verification Model
+
+> No `clone_and_run`. No separate `autochecker` SSH user.
+> Two verification channels: **GitHub API** for code, **SSH** for deployment.
+>
+> **Structural checks → GitHub API**
+> File existence, word counts, regex matches — same as Labs 1–6.
+> We know the student's GitHub alias and repo name, so this works out of the box.
+>
+> **Runtime & deployment checks → SSH as student's main user**
+> SSHes to the student's VM as their main user (`vm_username`).
+> Runs `python bot.py --test`, `docker ps`, `curl`, etc.
+> All checks see the real environment — real backend, real `.env`, real Docker.
+>
+> **Repo integrity check → SSH**
+> Verify that the deployed code on the VM actually comes from the student's
+> GitHub repo. SSH in, run `git -C <project-dir> remote get-url origin`,
+> and confirm it matches `github.com/{alias}/{repo-name}`.
+> This prevents students from deploying someone else's code.
+>
+> **Implications:**
+> - `--test` mode hits the **real backend on localhost** — no mock client needed
+> - If the backend is down, `/health` should report it as down (correct behavior)
+> - Student must have their repo cloned and their code deployed on the VM
+>
+> **Project directory discovery:** Autochecker looks for `~/lab-07-*` or the
+> repo name from the spec. Fallback: search home dir for `bot.py`/`main.py`.
 
 ---
 
@@ -57,6 +108,25 @@ a working product connected to a real backend.
 
 ## Task Breakdown
 
+### Setup
+
+**Goal:** Ensure the student's VM is reachable, the repo exists, and the
+backend is running. Same pattern as Labs 2–6 setup tasks.
+
+**What students do:**
+1. Ensure SSH key is in `~/.ssh/authorized_keys` (from Lab 6 Task 3)
+2. Register `vm_username` with the bot (if not already done)
+3. Create the lab repo on GitHub
+4. Confirm their LMS backend is running on the VM
+
+**Auto-checks:**
+
+| ID | Check | Channel | How |
+|----|-------|---------|-----|
+| setup-repo | Repository exists on GitHub | GitHub | repo_exists |
+| setup-ssh | SSH connectivity — can log in as student's main user | SSH | `echo ok` via SSH as `vm_username` |
+| setup-backend | LMS backend is running | SSH | `curl -sf http://localhost:8000/items` returns 200 |
+
 ### Task 1 — Plan and Scaffold
 
 **Goal:** Use Qwen Code to create a development plan and project skeleton.
@@ -77,15 +147,15 @@ a working product connected to a real backend.
 
 **Auto-checks:**
 
-| ID | Check | Type | How |
-|----|-------|------|-----|
-| t1-plan | `PLAN.md` exists and has ≥100 words | file_exists + file_word_count | structural |
-| t1-env | `.env.example` exists with `BOT_TOKEN`, `LMS_API_URL`, `LMS_API_KEY` | file_exists + regex_in_file | structural |
-| t1-readme | `README.md` exists and has ≥150 words | file_exists + file_word_count | structural |
-| t1-deps | `requirements.txt` or `pyproject.toml` exists | file_exists | structural |
-| t1-handlers | Handler module exists separately from bot entry point | file_exists | structural — check for `handlers.py` or `handlers/` dir |
-| t1-install | `pip install -r requirements.txt` succeeds | clone_and_run | run in venv |
-| t1-test-mode | `python bot.py --test "/start"` exits 0 and produces output | clone_and_run | check exit code + stdout non-empty |
+| ID | Check | Channel | How |
+|----|-------|---------|-----|
+| t1-plan | `PLAN.md` exists and has ≥100 words | GitHub | file_exists + file_word_count |
+| t1-env | `.env.example` exists with `BOT_TOKEN`, `LMS_API_URL`, `LMS_API_KEY` | GitHub | file_exists + regex_in_file |
+| t1-readme | `README.md` exists and has ≥150 words | GitHub | file_exists + file_word_count |
+| t1-deps | `requirements.txt` or `pyproject.toml` exists | GitHub | file_exists |
+| t1-handlers | Handler module exists separately from bot entry point | GitHub | file_exists — check for `handlers.py` or `handlers/` |
+| t1-install | Dependencies install without errors | SSH | `pip install -r requirements.txt` on VM |
+| t1-test-mode | `python bot.py --test "/start"` exits 0 and produces output | SSH | check exit code + stdout non-empty |
 
 ### Task 2 — Backend Integration
 
@@ -111,28 +181,16 @@ a working product connected to a real backend.
 
 **Auto-checks:**
 
-| ID | Check | Type | How |
-|----|-------|------|-----|
-| t2-start | `--test "/start"` returns text containing "welcome" or bot name (case-insensitive) | clone_and_run | regex on stdout |
-| t2-help | `--test "/help"` output lists at least 4 commands | clone_and_run | count `/command` patterns in output |
-| t2-health | `--test "/health"` output contains "healthy" or "ok" or status indicator | clone_and_run | needs mock or real backend; see note below |
-| t2-data-1 | `--test "/labs"` (or first data command) returns non-empty structured output | clone_and_run | stdout has ≥2 lines or JSON-like content |
-| t2-data-2 | `--test` with second data command returns non-empty output | clone_and_run | stdout non-empty |
-| t2-error | `--test "/health"` with no backend returns error message, not traceback | clone_and_run | run without backend env; check no `Traceback` in stderr |
+| ID | Check | Channel | How |
+|----|-------|---------|-----|
+| t2-start | `--test "/start"` returns text containing "welcome" or bot name (case-insensitive) | SSH | regex on stdout |
+| t2-help | `--test "/help"` output lists at least 4 commands | SSH | count `/command` patterns in stdout |
+| t2-health | `--test "/health"` output contains "healthy" or "ok" or status indicator | SSH | hits real backend on localhost |
+| t2-data-1 | `--test "/labs"` (or first data command) returns non-empty structured output | SSH | stdout has ≥2 lines |
+| t2-data-2 | `--test` with second data command returns non-empty output | SSH | stdout non-empty |
+| t2-error | Backend error produces user-friendly message, not traceback | SSH | stop backend → `--test "/health"` → no `Traceback` → restart |
 
-> **Note on backend-dependent checks:** For `clone_and_run` checks, the
-> autochecker won't have access to the student's live backend. Two options:
->
-> **Option A — Mock mode:** Require `--test` mode to use a built-in mock
-> API client that returns sample data. This tests handler logic without a
-> real backend. The mock should be part of the student's codebase.
->
-> **Option B — Live VM check:** Use SSH to the student's VM and run
-> `curl` against the bot's test endpoint. This verifies real integration
-> but requires the bot to be deployed (Task 4).
->
-> **Recommendation:** Use Option A for Task 2 checks (handler logic),
-> Option B for Task 4 checks (deployment verification).
+> `--test` mode hits the real backend on localhost. No mock needed.
 
 ### Task 3 — Smart Interaction
 
@@ -158,17 +216,14 @@ of "fetch data → build prompt → call LLM → format response."
 
 **Auto-checks:**
 
-| ID | Check | Type | How |
-|----|-------|------|-----|
-| t3-ask | `--test "/ask what labs are available"` returns non-empty answer (≥20 chars) | clone_and_run | needs LLM API key in env or mock |
-| t3-buttons | Source code contains keyboard/button setup (InlineKeyboardMarkup, ReplyKeyboardMarkup, or equivalent) | regex_in_file | grep handler code |
-| t3-ask-data | `/ask` handler fetches from backend before calling LLM (not pure LLM) | code review / regex | look for API call in ask handler path |
+| ID | Check | Channel | How |
+|----|-------|---------|-----|
+| t3-ask | `--test "/ask what labs are available"` returns non-empty answer (≥20 chars) | SSH | real LLM key + real backend from student's `.env` |
+| t3-buttons | Source code contains keyboard/button setup (InlineKeyboardMarkup, ReplyKeyboardMarkup, or equivalent) | GitHub | regex_in_file |
+| t3-ask-data | `/ask` handler fetches from backend before calling LLM (not pure LLM) | GitHub | regex_in_file — look for API call in ask handler |
 
-> **Note:** `/ask` checks are hard to fully auto-verify since they depend on
-> an LLM API key. Options:
-> - Require `OPENROUTER_API_KEY` in `.env.example` and test with a real key
-> - Accept that `/ask` is partly TA-verified
-> - Check that the handler code path includes both an API fetch and an LLM call
+> `/ask` runs with the student's own `.env` on their VM. If the key is
+> missing or expired, the check fails — student's responsibility.
 
 ### Task 4 — Deploy and Document
 
@@ -180,14 +235,15 @@ of "fetch data → build prompt → call LLM → format response."
 3. Verify the bot responds in Telegram
 4. Update README with deployment instructions
 
-**Auto-checks (via SSH to student VM):**
+**Auto-checks:**
 
-| ID | Check | Type | How |
-|----|-------|------|-----|
-| t4-compose | `docker-compose.yml` (or `compose.yaml`) includes a bot service | SSH + grep | check compose file on VM |
+| ID | Check | Channel | How |
+|----|-------|---------|-----|
+| t4-repo-match | Deployed code is from student's GitHub repo | SSH | `git remote get-url origin` matches `github.com/{alias}/{repo}` |
+| t4-compose | `docker-compose.yml` (or `compose.yaml`) includes a bot service | SSH | `grep -i bot docker-compose.yml` |
 | t4-running | Bot container is running | SSH | `docker ps` shows bot container |
-| t4-health | `curl http://localhost:8000/items` from VM returns 200 | SSH | verify backend is still up |
-| t4-readme | README has "deploy" section (case-insensitive heading) | file_exists + regex_in_file | structural |
+| t4-health | Backend is still up alongside the bot | SSH | `curl -sf http://localhost:8000/items` returns 200 |
+| t4-readme | README has "deploy" section | GitHub | regex_in_file — heading containing "deploy" |
 
 **TA verification (demo):**
 - Bot responds to `/start`, `/help`, `/health` in Telegram
@@ -202,29 +258,34 @@ of "fetch data → build prompt → call LLM → format response."
 
 ### Auto-Checked (autochecker)
 
+**GitHub API** — structural checks on the repo (file existence, content, regex):
+
+**SSH as student's main user** — runtime & deployment checks on the VM:
+
+**Setup (3 checks)**
+- GitHub: repo exists
+- SSH: connectivity (prerequisite for all SSH checks), backend running
+
 **Task 1 — Structure & Scaffold (7 checks)**
-- File existence: PLAN.md, .env.example, README.md, deps file, handler module
-- Install: dependencies install cleanly
-- Test mode: `--test "/start"` works
+- GitHub: PLAN.md, .env.example, README.md, deps file, handler module
+- SSH: dependencies install, `--test "/start"` works
 
 **Task 2 — Backend Integration (6 checks)**
-- /start, /help return expected content via test mode
-- /health returns status (with mock)
-- 2 data commands return output (with mock)
-- Error handling (no traceback on failure)
+- SSH: /start, /help return expected content via test mode
+- SSH: /health returns status (real backend on localhost)
+- SSH: 2 data commands return output (real backend data)
+- SSH: error handling (no traceback on failure)
 
 **Task 3 — Smart Features (3 checks)**
-- /ask returns non-empty answer
-- Button/keyboard code exists
-- /ask handler includes API fetch
+- SSH: /ask returns non-empty answer (real LLM key from student's .env)
+- GitHub: button/keyboard code exists, /ask handler includes API fetch
 
-**Task 4 — Deployment (4 checks)**
-- Compose file has bot service
-- Bot container running on VM
-- Backend still healthy
-- README has deploy section
+**Task 4 — Deployment (5 checks)**
+- SSH: repo integrity — deployed code matches student's GitHub repo
+- SSH: compose file has bot service, bot container running, backend healthy
+- GitHub: README has deploy section
 
-**Total: ~20 auto-checks**
+**Total: ~24 auto-checks (3 setup + 7 + 6 + 3 + 5)**
 
 ### TA-Verified (demo)
 
@@ -255,16 +316,15 @@ python bot.py --test "/ask what labs are available"
 
 **Behavior:**
 - Prints the bot's response text to **stdout**
-- Uses a **mock API client** (no real backend needed) for data commands
+- Hits the **real backend on localhost** (reads `LMS_API_URL` from `.env`)
 - Exits with code **0** on success, **non-zero** on error
-- Does NOT connect to Telegram (no BOT_TOKEN required)
-- LLM-dependent commands (`/ask`) may use a real API key if available,
-  or return a placeholder response if not
+- Does NOT connect to Telegram (no `BOT_TOKEN` required)
+- LLM-dependent commands (`/ask`) use the real `OPENROUTER_API_KEY` from `.env`
 
 **Why this matters:**
-- Autochecker can verify handler logic without Telegram or a live backend
+- Autochecker can verify handler logic without Telegram
 - Forces students to separate handlers from transport (good architecture)
-- Makes development faster (test without deploying)
+- Makes development faster (test without deploying to Telegram)
 
 **Implementation hint for students:**
 
@@ -272,12 +332,12 @@ python bot.py --test "/ask what labs are available"
 # bot.py (simplified)
 import sys
 from handlers import handle_command
-from api_client import MockClient, RealClient
+from api_client import ApiClient
 
 if __name__ == "__main__":
     if "--test" in sys.argv:
         command = sys.argv[sys.argv.index("--test") + 1]
-        client = MockClient()  # no real backend needed
+        client = ApiClient()  # reads LMS_API_URL from .env
         print(handle_command(command, client))
     else:
         # normal Telegram bot startup
@@ -296,8 +356,7 @@ handlers/
   data.py           ← /labs, /scores, /top, etc.
   ask.py            ← /ask (LLM-powered)
 services/
-  api_client.py     ← real HTTP client for LMS backend
-  mock_client.py    ← mock client for --test mode
+  api_client.py     ← HTTP client for LMS backend
   llm.py            ← LLM integration (OpenRouter)
 config.py           ← env var loading
 .env.example
@@ -334,24 +393,24 @@ Pass threshold: 75% (consistent with other labs)
    - **Leaning toward:** empty repo with only README containing requirements.
      The whole point is that Qwen scaffolds it.
 
-2. **Mock client: provided or student-built?**
-   - If provided: consistent test interface, easier auto-checking
-   - If student-built: teaches mocking, but adds scope
-   - **Leaning toward:** student-built, but with clear spec of what mock
-     should return (sample data in the lab handout)
-
-3. **LLM API key for `/ask`:**
-   - Students already have OpenRouter keys from Lab 6
-   - Autochecker needs a key to verify `/ask` — or we accept it's TA-only
-   - **Leaning toward:** auto-check that `/ask` handler exists and calls
-     both API + LLM; quality verified by TA
-
-4. **Periodic health check verification:**
+2. **Periodic health check verification:**
    - Hard to auto-check a background task
    - Could require a `--test-healthcheck` flag that runs one cycle and exits
    - **Leaning toward:** P1 (should have), TA-verified in demo
 
-5. **Docker network:**
-   - Bot needs to reach backend. If both in same compose, use service name.
-   - If backend is separate compose, need shared network or host IP.
-   - **Leaning toward:** require single compose file with both services
+## Resolved Decisions
+
+- **Verification model:** GitHub API for structural checks, SSH for runtime.
+  No `clone_and_run`. No `autochecker` SSH user.
+- **SSH user:** Always SSH as the student's main user (`vm_username`).
+  This gives access to repo, Docker, `.env`, everything.
+- **Repo integrity:** `git remote get-url origin` on VM must match the
+  student's known GitHub alias + repo name. Prevents deploying others' code.
+- **Mock client:** Not needed. Checks run on the student's VM where the
+  real backend is on localhost. `--test` mode hits the real API.
+- **LLM API key:** Runs with student's own `.env` on their VM. If key is
+  missing, check fails — student's responsibility.
+- **Docker network:** Single compose file with bot + backend on the same
+  network. Bot reaches backend via Docker service name.
+- **Project directory:** Convention `~/lab-07-*` or repo name from spec.
+  Fallback: search home dir for entry point with `--test` flag.
