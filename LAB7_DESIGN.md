@@ -12,13 +12,14 @@ a working product connected to a real backend.
 ## Prerequisites
 
 - Labs 2–6 completed (backend deployed on VM with PostgreSQL, ETL, analytics)
-- Student's LMS backend running on VM (port 42002 via Caddy, or 8000 direct)
+- Student's LMS backend running on VM (port 42002 via Caddy)
 - Working API key for the backend (`LMS_API_KEY`)
 - Telegram bot token (from @BotFather)
 
-> **Base repo:** Lab 7 forks from `se-toolkit-lab-6`. Students get the
-> working backend + frontend + Docker Compose as their starting point.
-> They add the Telegram bot as a new service on top of it.
+> **Base repo:** Lab 7 forks from `se-toolkit-lab-7` (which is a copy of
+> `se-toolkit-lab-6`). Students get the working backend + frontend + Docker
+> Compose as their starting point. They add Telegram bot code into the
+> same repo — not a separate project.
 
 ### SSH Setup (carried over from Lab 6 Task 3)
 
@@ -120,17 +121,20 @@ backend is deployed and running, and the database has data (ETL synced).
 Mirrors Lab 6 setup checks + deployment + sync.
 
 **What students do:**
-1. Fork the lab-7 template repo on GitHub
-2. Enable GitHub Issues on the fork
-3. Ensure SSH key is in `~/.ssh/authorized_keys` (from Lab 6 Task 3)
-4. Register `vm_username` with the bot (if not already done)
+1. Fork the lab-7 template repo on GitHub, enable Issues
+2. Ensure SSH key is in `~/.ssh/authorized_keys` (from Lab 6 Task 3)
+3. Register `vm_username` with the bot (if not already done)
+4. Stop Lab 6 containers (`docker compose --env-file .env.docker.secret down`)
 5. Clone the repo on their VM
 6. Copy `.env.docker.example` → `.env.docker.secret`, fill in credentials
-7. Run `docker compose up -d` to deploy backend + frontend + database
-8. Trigger ETL sync: `POST /pipeline/sync` via Swagger UI or curl
-   (this populates the database with labs, tasks, learners, and interactions
-   from the autochecker API — without this, all analytics endpoints return empty)
-9. Verify the dashboard shows data at `http://<VM_IP>:42002`
+7. Configure Docker DNS on VM (`dns: ["8.8.8.8", "8.8.4.4"]` in daemon.json)
+8. Run `docker compose --env-file .env.docker.secret up --build -d`
+9. Trigger ETL sync: `curl -X POST http://localhost:42002/pipeline/sync`
+   (populates database — without this, all analytics return empty)
+10. Verify dashboard shows data at `http://VM_IP:42002`
+11. Get a Telegram bot token from @BotFather
+
+> Setup instructions are implemented in `lab/tasks/setup-simple.md`.
 
 **Auto-checks (reused from Lab 6):**
 
@@ -158,24 +162,27 @@ Mirrors Lab 6 setup checks + deployment + sync.
 4. Verify the scaffold runs
 
 **Deliverables:**
-- `PLAN.md` — development plan produced with agent assistance
-- Project structure with separated handler layer
-- `requirements.txt` or `pyproject.toml` with dependencies
-- `.env.example` with required variables
-- Entry point (`bot.py` or `main.py`) that starts without crashing
+- `bot/PLAN.md` — development plan produced with agent assistance
+- Bot code in a `bot/` directory with separated handler layer
+- Bot dependencies in `bot/requirements.txt` (repo already has `pyproject.toml` for backend)
+- `BOT_TOKEN` added to `.env.agent.example`
+- Bot entry point (`bot/bot.py` or `bot/main.py`) that starts without crashing
 - CLI test mode wired up (even if handlers return placeholder text)
+
+> Students add their bot code inside the existing repo (forked from lab-7
+> template). The repo already has `backend/`, `frontend/`, `docker-compose.yml`,
+> `README.md`, etc. The bot lives in a `bot/` subdirectory.
 
 **Auto-checks:**
 
 | ID | Check | Channel | How |
 |----|-------|---------|-----|
-| t1-plan | `PLAN.md` exists and has ≥100 words | GitHub | file_exists + file_word_count |
-| t1-env | `.env.example` exists with `BOT_TOKEN`, `LMS_API_URL`, `LMS_API_KEY` | GitHub | file_exists + regex_in_file |
-| t1-readme | `README.md` exists and has ≥150 words | GitHub | file_exists + file_word_count |
-| t1-deps | `requirements.txt` or `pyproject.toml` exists | GitHub | file_exists |
-| t1-handlers | Handler module exists separately from bot entry point | GitHub | file_exists — check for `handlers.py` or `handlers/` |
-| t1-install | Dependencies install without errors | SSH | `pip install -r requirements.txt` on VM |
-| t1-test-mode | `python bot.py --test "/start"` exits 0 and produces output | SSH | check exit code + stdout non-empty |
+| t1-plan | `bot/PLAN.md` exists and has ≥100 words | GitHub | file_exists + file_word_count |
+| t1-env | `.env.agent.example` contains `BOT_TOKEN` | GitHub | regex_in_file |
+| t1-deps | `bot/requirements.txt` exists | GitHub | file_exists |
+| t1-handlers | Handler module exists separately from bot entry point | GitHub | file_exists — check for `bot/handlers.py` or `bot/handlers/` |
+| t1-install | Bot dependencies install without errors | SSH | `pip install -r bot/requirements.txt` on VM |
+| t1-test-mode | `python bot/bot.py --test "/start"` exits 0 and produces output | SSH | check exit code + stdout non-empty |
 
 ### Task 2 — Backend Integration
 
@@ -306,7 +313,7 @@ agent is embedded inside a user-facing product.
 | t4-repo-match | Deployed code is from student's GitHub repo | SSH | `git remote get-url origin` matches `github.com/{alias}/{repo}` |
 | t4-compose | `docker-compose.yml` (or `compose.yaml`) includes a bot service | SSH | `grep -i bot docker-compose.yml` |
 | t4-running | Bot container is running | SSH | `docker ps` shows bot container |
-| t4-health | Backend is still up alongside the bot | SSH | `curl -sf http://localhost:8000/items` returns 200 |
+| t4-health | Backend is still up alongside the bot | SSH | `curl -sf http://localhost:42002/docs` returns 200 |
 | t4-readme | README has "deploy" section | GitHub | regex_in_file — heading containing "deploy" |
 
 **TA verification (demo):**
@@ -331,8 +338,8 @@ agent is embedded inside a user-facing product.
 - GitHub: repo exists, is fork, issues enabled
 - SSH: connectivity, backend running, database has data (ETL synced)
 
-**Task 1 — Structure & Scaffold (7 checks)**
-- GitHub: PLAN.md, .env.example, README.md, deps file, handler module
+**Task 1 — Structure & Scaffold (6 checks)**
+- GitHub: bot/PLAN.md, .env.agent.example has BOT_TOKEN, bot/requirements.txt, handler module
 - SSH: dependencies install, `--test "/start"` works
 
 **Task 2 — Backend Integration (6 checks)**
@@ -350,7 +357,7 @@ agent is embedded inside a user-facing product.
 - SSH: compose file has bot service, bot container running, backend healthy
 - GitHub: README has deploy section
 
-**Total: ~29 auto-checks (6 setup + 7 + 6 + 5 + 5)**
+**Total: ~28 auto-checks (6 setup + 6 + 6 + 5 + 5)**
 
 ### TA-Verified (demo)
 
@@ -369,27 +376,27 @@ agent is embedded inside a user-facing product.
 The bot must support a `--test` flag for offline command verification:
 
 ```bash
-# Syntax
-python bot.py --test "<message>"
+# Syntax (run from repo root)
+python bot/bot.py --test "<message>"
 
 # Slash commands
-python bot.py --test "/start"
-python bot.py --test "/help"
-python bot.py --test "/health"
-python bot.py --test "/labs"
+python bot/bot.py --test "/start"
+python bot/bot.py --test "/help"
+python bot/bot.py --test "/health"
+python bot/bot.py --test "/labs"
 
 # Natural language (intent routing)
-python bot.py --test "what labs are available"
-python bot.py --test "which lab has the lowest pass rate"
-python bot.py --test "asdfgh"
+python bot/bot.py --test "what labs are available"
+python bot/bot.py --test "which lab has the lowest pass rate"
+python bot/bot.py --test "asdfgh"
 ```
 
 **Behavior:**
 - Prints the bot's response text to **stdout**
-- Hits the **real backend on localhost** (reads `LMS_API_URL` from `.env`)
+- Hits the **real backend on localhost:42002** (reads config from `.env.agent.secret`)
 - Exits with code **0** on success, **non-zero** on error
-- Does NOT connect to Telegram (no `BOT_TOKEN` required)
-- LLM-dependent messages use the real `OPENROUTER_API_KEY` from `.env`
+- Does NOT connect to Telegram (no `BOT_TOKEN` required in test mode)
+- LLM-dependent messages use the real LLM key from `.env.agent.secret`
 - Messages without `/` prefix go through the intent router (Task 3)
 
 **Why this matters:**
@@ -400,15 +407,15 @@ python bot.py --test "asdfgh"
 **Implementation hint for students:**
 
 ```python
-# bot.py (simplified)
+# bot/bot.py (simplified)
 import sys
 from handlers import handle_command
-from api_client import ApiClient
+from services.api_client import ApiClient
 
 if __name__ == "__main__":
     if "--test" in sys.argv:
         command = sys.argv[sys.argv.index("--test") + 1]
-        client = ApiClient()  # reads LMS_API_URL from .env
+        client = ApiClient()  # reads backend URL from .env.agent.secret
         print(handle_command(command, client))
     else:
         # normal Telegram bot startup
@@ -420,22 +427,27 @@ if __name__ == "__main__":
 ## Architecture Guidance (given to students)
 
 ```
-bot.py              ← entry point (Telegram startup OR --test mode)
-handlers/
-  commands.py       ← /start, /help, /health, /labs, etc.
-  intent.py         ← natural language router (LLM picks tools)
-tools/
-  api.py            ← tool definitions for LLM (get_items, get_scores, etc.)
-  registry.py       ← tool registry mapping names → functions
-services/
-  api_client.py     ← HTTP client for LMS backend
-  llm.py            ← LLM integration (OpenRouter)
-config.py           ← env var loading
-.env.example
-requirements.txt
-README.md
-PLAN.md
-Dockerfile          ← bot container
+se-toolkit-lab-7/           ← forked repo (already has backend/, frontend/, etc.)
+├── bot/                    ← NEW — all bot code goes here
+│   ├── bot.py              ← entry point (Telegram startup OR --test mode)
+│   ├── handlers/
+│   │   ├── commands.py     ← /start, /help, /health, /labs, etc.
+│   │   └── intent.py       ← natural language router (LLM picks tools)
+│   ├── tools/
+│   │   ├── api.py          ← tool definitions for LLM (get_items, get_scores, etc.)
+│   │   └── registry.py     ← tool registry mapping names → functions
+│   ├── services/
+│   │   ├── api_client.py   ← HTTP client for LMS backend
+│   │   └── llm.py          ← LLM integration (OpenRouter/Qwen)
+│   ├── config.py           ← env var loading
+│   ├── requirements.txt    ← bot-specific dependencies
+│   ├── Dockerfile          ← bot container
+│   └── PLAN.md             ← development plan from Qwen Code
+├── backend/                ← existing (from lab-6 fork)
+├── frontend/               ← existing
+├── docker-compose.yml      ← existing — students ADD a bot service
+├── .env.agent.example      ← existing — students ADD BOT_TOKEN
+└── .env.docker.secret      ← existing — backend credentials
 ```
 
 Students don't have to follow this exactly — it's a suggestion. The key
@@ -498,36 +510,37 @@ Lab 7 forks `se-toolkit-lab-6`. Here's what carries over and what changes.
 
 ## Open Questions
 
-1. **Should we provide a bot template repo?** Or start from empty repo?
-   - Pro template: less boilerplate friction, students focus on integration
-   - Pro empty: more realistic "start from scratch with agent" experience
-   - **Leaning toward:** empty repo with only README containing requirements.
-     The whole point is that Qwen scaffolds it.
-
-2. **Periodic health check verification:**
+1. **Periodic health check verification:**
    - Hard to auto-check a background task
    - Could require a `--test-healthcheck` flag that runs one cycle and exits
    - **Leaning toward:** P1 (should have), TA-verified in demo
 
 ## Resolved Decisions
 
-- **Base repo:** Fork from `se-toolkit-lab-6`. Students get working backend
-  + frontend + Docker Compose. They add the bot on top.
+- **Base repo:** Fork from `se-toolkit-lab-7` (copied from lab-6). Students
+  get working backend + frontend + Docker Compose. Bot code goes in `bot/`
+  subdirectory within the same repo.
+- **Setup:** Implemented in `lab/tasks/setup-simple.md`. Includes: stop Lab 6
+  containers, configure Docker DNS, deploy, ETL sync, SSH key, bot token.
 - **Setup checks:** Reuse Lab 6's `repo_exists`, `repo_is_fork`,
-  `repo_has_issues`, `ssh_check`, `backend_running` — same engine methods.
+  `repo_has_issues`, `ssh_check`, `backend_running` + new `setup-data`.
 - **Verification model:** GitHub API for structural checks, SSH for runtime.
   No `clone_and_run`. No `autochecker` SSH user.
 - **SSH user:** Always SSH as the student's main user (`vm_username`).
   This gives access to repo, Docker, `.env`, everything.
 - **Repo integrity:** `git remote get-url origin` on VM must match the
-  student's known GitHub alias + repo name. Prevents deploying others' code.
-- **Mock client:** Not needed. Checks run on the student's VM where the
-  real backend is on localhost. `--test` mode hits the real API.
-- **Env vars:** Different from Lab 6. Lab 7 needs `BOT_TOKEN`, `LMS_API_URL`,
-  `LMS_API_KEY`, `OPENROUTER_API_KEY` (Lab 6 had `LLM_API_KEY`, `LLM_API_BASE`).
-- **LLM API key:** Runs with student's own `.env` on their VM. If key is
-  missing, check fails — student's responsibility.
+  student's known GitHub alias + repo name.
+- **Mock client:** Not needed. `--test` mode hits the real backend on localhost.
+- **Env vars:** Bot-specific vars (`BOT_TOKEN`) go in `.env.agent.secret`
+  (already gitignored via `*.secret`). Backend vars stay in `.env.docker.secret`.
+- **LLM API key:** Runs with student's own `.env.agent.secret` on their VM.
+  If key is missing, check fails — student's responsibility.
 - **Docker network:** Single compose file with bot + backend on the same
   network. Bot reaches backend via Docker service name.
-- **Project directory:** Convention `~/se-toolkit-lab-7` (same as repo name).
-  Fallback: search home dir for entry point with `--test` flag.
+- **Project directory:** `~/se-toolkit-lab-7`. Bot code in `bot/` subdirectory.
+- **ETL score bug:** API returns null scores for ~93% of records. Fixed in ETL
+  by computing `score = (passed / total) * 100` when API score is null.
+- **Docker DNS:** University VMs can't resolve `registry.npmjs.org`. Setup
+  instructions include `daemon.json` DNS fix as an explicit step.
+- **Registry prefix:** `REGISTRY_PREFIX` build arg — defaults to university
+  harbor cache, set empty for Docker Hub outside campus.
