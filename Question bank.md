@@ -2,13 +2,13 @@
 
 ## Git & Workflow
 
-**Q1.** Describe a good Git/GitHub workflow for a lab task from start to finish. What happens at each stage?
+**Q1.** Describe the Git workflow we followed during the labs from start to finish. Explain what happens at each stage.
 
 > Expect: issue, branch, commit, pull request, review, merge.
 
 **Q2.** You and a teammate both edited the same line in `README.md` on separate branches. What will this lead to? Describe step-by-step how you resolve it.
 
-**Q3.** What is a conventional commit message? Give an example of a correct conventional commit for a bug fix to the login endpoint, and explain why teams adopt this convention.
+**Q3.** What is a conventional commit message? Give an example of a correct conventional commit for a bug fix to the /items endpoint.
 
 ---
 
@@ -18,13 +18,13 @@
 
 > Expect: method, path, query parameters, headers, body, status code, and response body.
 
-**Q5.** A client calls an API and receives HTTP 200, 403, 404, or 500. Explain what each status code usually means, and what kind of problem (if any) you would suspect first in each case.
+**Q5.** A client calls an API and receives HTTP 200, 401, 403, 404, 500, 502. Explain what each status code usually means, and what kind of problem (if any) you would suspect first in each case.
 
-**Q6.** You open Swagger UI for an unfamiliar API and have 10 minutes to understand how to use it. What specific information can you extract from Swagger UI, and how does it help you treat the API as a contract between frontend and backend?
+**Q6.** You open Swagger UI for an unfamiliar API. What specific information can you extract from it about a specific endpoint?
 
 > Expect: endpoints, methods, parameters, authentication, request/response bodies and formats; Swagger acts as a live, testable contract that both sides agree on.
 
-**Q7.** What is the relationship between a database schema, a model object, and business logic? What will a mismatch between them lead to and why?
+**Q7.** What is the relationship between a database schema, a model object, and business logic?
 
 ---
 
@@ -34,7 +34,7 @@
 
 **Q9.** Explain the difference between *authentication* and *authorization*. 
 
-**Q10.** You SSH into your VM and need to harden it. Name four specific security measures you would apply and explain why each matters.
+**Q10.** You SSH into your VM and need to harden it. Name at least four security measures you would apply and explain why each matters.
 
 > Expect: firewall rules, fail2ban, disabling root SSH login, and disabling password authentication.
 
@@ -42,25 +42,13 @@
 
 ## Docker & Deployment
 
-**Q11.** Explain three ways we deployed our LMS service locally and on VM. What does each stage add, and why do we use all three?
-
-> Expect: venv with uv, Docker Compose locally, and Docker Compose on a remote VM.
+**Q11.** Compare the two ways we ran the LMS service: directly in a local Python environment and with Docker Compose on a remote VM. Explain reasons and advantages of using both.
 
 **Q12.** Explain the difference between a `Dockerfile` and a `docker-compose.yml` file. What problem does each solve, and how do they relate to each other?
 
-**Q13.** What is *Docker layer caching*? Given this Dockerfile:
+**Q13.** How does Docker layer caching work in principle, and why can Dockerfile order make rebuilds slow?
 
-```dockerfile
-FROM python:3.12-slim
-COPY . /app
-WORKDIR /app
-RUN pip install -r requirements.txt
-CMD ["python", "main.py"]
-```
-
-You change one line in `main.py` and rebuild. Explain why *all* layers from `COPY` onward are rebuilt, and rewrite the Dockerfile so that changing `main.py` does **not** reinstall dependencies.
-
-**Q14.** What is the *build context* in Docker? A student's image is 2 GB even though the app is 50 MB. They run `docker build .` from a directory that also contains `.git/`, `node_modules/`, and training data. Explain what happened and how to fix it.
+**Q14.** What is Docker build context, and how can a bad build context make images larger or builds slower?
 
 ---
 
@@ -82,17 +70,17 @@ You change one line in `main.py` and rebuild. Explain why *all* layers from `COP
 
 **Q18.** Describe the agentic loop step by step, from user input to final answer. Include what happens when the LLM requests a tool call.
 
-**Q19.** Your agent is asked *"How many endpoints does the API have?"* It has two tools: `read_file` and `list_files`. The agent calls `read_file("main.py")` once and answers "3 endpoints," but the correct answer is 7 (routes are spread across multiple files). What went wrong and how would you improve the agent's behavior?
+**Q19.** If an agent read too little code and gave an incorrect answer about the API, what went wrong in its tool-use strategy?
 
 ---
 
 ## Bot Architecture & Integration
 
-**Q20.** You want to test your Telegram bot's logic without sending real Telegram messages. How would you design the bot's code so that this is possible?
+**Q20.** How to separate Telegram transport code from business logic so the bot can be tested without Telegram?
 
 > Expect: separate handlers (business logic) from transport (Telegram); use CLI `--test` mode or call handlers directly in tests.
 
-**Q21.** In Lab 7, user messages are routed to backend API calls using an LLM instead of regex/command matching. Give one advantage and one disadvantage of LLM-based intent routing compared to traditional command parsing (e.g., `/scores lab-03`).
+**Q21.** Compare LLM-based intent routing with traditional command parsing. Give one advantage and one disadvantage of each.
 
 > Expect: user message → tool definitions → LLM decision → tool execution → feeding results back → final response.
 
@@ -100,6 +88,6 @@ You change one line in `main.py` and rebuild. Explain why *all* layers from `COP
 
 ## System Design
 
-**Q22.** Draw and describe the full architecture of the LMS system we built across labs 2–7. Include all components (backend, database, bot, LLM, external APIs), show how they communicate, and explain how the system is deployed (what runs where and how).
+**Q22.** Draw and describe the full architecture of the LMS system we built on labs 7 and 8. Include all components, how they communicate and are deployed.
 
 > Expect: FastAPI backend + PostgreSQL on VM via Docker Compose; Telegram bot service calling backend API; LLM API (OpenRouter/Qwen) for agent and intent routing; ETL sync from external API; deployment via Docker Compose on remote VM; diagram showing containers, network connections, and external services.
