@@ -1,0 +1,105 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[a4paper,margin=1.2cm]{geometry}
+\usepackage{enumitem}
+\usepackage[most]{tcolorbox}
+\usepackage{needspace}
+
+\setlist[enumerate]{
+  leftmargin=*,
+  itemsep=0.45em,
+  topsep=0.2em,
+  label=\arabic*.
+}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0pt}
+
+\newcommand{\answerbox}[1]{%
+  \begin{tcolorbox}[
+    enhanced,
+    colback=white,
+    colframe=black,
+    boxrule=0.5pt,
+    arc=1mm,
+    left=1.6mm,
+    right=1.6mm,
+    top=1.4mm,
+    bottom=1.4mm,
+    height=#1
+  ]
+  \mbox{}\vfill
+  \end{tcolorbox}
+}
+
+\begin{document}
+
+\begin{center}
+{\large \textbf{Retake Exam Questions}}\\[0.2em]
+\small Answer in the boxes below each question.
+\end{center}
+
+\vspace{0.2em}
+\noindent
+\textbf{Name:} \rule{0.39\textwidth}{0.4pt}
+\hfill
+\textbf{Email:} \rule{0.33\textwidth}{0.4pt}
+
+\vspace{0.35em}
+\begin{tcolorbox}[
+  colback=gray!8,
+  colframe=black,
+  boxrule=0.4pt,
+  arc=1mm,
+  left=1.2mm,
+  right=1.2mm,
+  top=0.8mm,
+  bottom=0.8mm
+]
+\footnotesize Write clearly. Handwriting must be legible because responses will be transcribed by AI.
+\end{tcolorbox}
+
+\vspace{0.15em}
+
+\begin{enumerate}
+  \needspace{5.5cm}
+  \item List the four characteristics of a good product backlog and briefly explain each of them.
+  \answerbox{4.1cm}
+
+  \needspace{3.3cm}
+  \item Provide an example of a user story following the standard template.
+  \answerbox{2.1cm}
+
+  \needspace{4.8cm}
+  \item Explain the main principles of the waterfall model (not the same as its stages).
+  \answerbox{3.3cm}
+
+  \needspace{4.4cm}
+  \item Write any three Agile Manifesto principles by heart.
+  \answerbox{2.9cm}
+
+  \needspace{5.3cm}
+  \item List the roles within the Scrum team and explain their responsibilities.
+  \answerbox{3.8cm}
+
+  \needspace{7.8cm}
+  \item What is a use case diagram, and what purpose does it serve? Draw an example for a taxi app.
+  \answerbox{7.1cm}
+
+  \needspace{4.2cm}
+  \item Explain the terms domain and stakeholder in requirements engineering.
+  \answerbox{3.5cm}
+
+  \needspace{3.7cm}
+  \item What is an MVP? Provide a proper definition.
+  \answerbox{2.9cm}
+
+  \needspace{3.3cm}
+  \item How do you calculate team velocity?
+  \answerbox{2.4cm}
+
+  \needspace{3.3cm}
+  \item What are the four common method types within an HTTP request?
+  \answerbox{2.4cm}
+\end{enumerate}
+
+\end{document}

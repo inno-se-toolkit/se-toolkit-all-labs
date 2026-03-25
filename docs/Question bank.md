@@ -42,7 +42,7 @@
 
 ## Docker & Deployment
 
-**Q11.** Compare the two ways we ran the LMS service: directly in a local Python environment and with Docker Compose on a remote VM. Explain reasons and advantages of using both.
+**Q11.** What is Docker, and how is running an application with Docker different from running it directly with `uv` in a local Python environment?
 
 **Q12.** Explain the difference between a `Dockerfile` and a `docker-compose.yml` file. What problem does each solve, and how do they relate to each other?
 
@@ -88,6 +88,6 @@
 
 ## System Design
 
-**Q22.** Draw and describe the full architecture of the LMS system we built on labs 7 and 8. Include all components, how they communicate and are deployed.
+**Q22.** Draw and describe the architecture of the LMS system we built during the labs. Include all components, how they communicate and are deployed.
 
 > Expect: FastAPI backend + PostgreSQL on VM via Docker Compose; Telegram bot service calling backend API; LLM API (OpenRouter/Qwen) for agent and intent routing; ETL sync from external API; deployment via Docker Compose on remote VM; diagram showing containers, network connections, and external services.
