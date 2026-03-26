@@ -44,4 +44,4 @@
 [submodule "se-toolkit-lab-8"]
 	path = se-toolkit-lab-8
 	url = https://github.com/inno-se-toolkit/se-toolkit-lab-8.git
-	branch = dev
+	branch = main
