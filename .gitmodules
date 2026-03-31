@@ -45,3 +45,6 @@
 	path = se-toolkit-lab-8
 	url = https://github.com/inno-se-toolkit/se-toolkit-lab-8.git
 	branch = main
+[submodule "se-toolkit-lab-9"]
+	path = se-toolkit-lab-9
+	url = https://github.com/inno-se-toolkit/se-toolkit-lab-9.git
