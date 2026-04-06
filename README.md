@@ -89,7 +89,7 @@ The course is organized into 4 sections delivered across 10 weekly labs.
 | 7 | Build a Client with an AI Coding Agent | [se-toolkit-lab-7](https://github.com/inno-se-toolkit/se-toolkit-lab-7) |
 | 8 | The Agent is the Interface | [se-toolkit-lab-8](https://github.com/inno-se-toolkit/se-toolkit-lab-8) |
 | 9 | Hackathon | [se-toolkit-lab-9](https://github.com/inno-se-toolkit/se-toolkit-lab-9) |
-| 10 | Demo Day | — |
+| 10 | Demo Day | [se-toolkit-lab-10](https://github.com/inno-se-toolkit/se-toolkit-lab-10) |
 
 ### Section 1: SE Fundamentals and Development Tools
 

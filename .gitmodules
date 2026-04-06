@@ -29,3 +29,6 @@
 [submodule "se-toolkit-lab-1"]
 	path = se-toolkit-lab-1
 	url = https://github.com/inno-se-toolkit/lab-01-market-product-and-git
+[submodule "se-toolkit-lab-10"]
+	path = se-toolkit-lab-10
+	url = https://github.com/inno-se-toolkit/se-toolkit-lab-10.git
