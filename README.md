@@ -198,7 +198,7 @@ Students with a legal excuse receive a deadline extension to submit in [@auchebo
 
 The extension length equals the number of excused days, counted starting from the lab day. For example, if you have a legal excuse from Thursday to Tuesday and your lab is on Saturday, you get an extension of four days (Saturday to Tuesday).
 
-Legal excuse information is collected from the Dean's Office (DoE) when finalizing the course.
+Legal excuse information is collected from DoE when finalizing the course.
 
 ### P.4.4 Recommendations for Students
 
