@@ -88,7 +88,7 @@ The course is organized into 4 sections delivered across 10 weekly labs.
 | 6 | Build Your Own Agent | [se-toolkit-lab-6](https://github.com/inno-se-toolkit/se-toolkit-lab-6) |
 | 7 | Build a Client with an AI Coding Agent | [se-toolkit-lab-7](https://github.com/inno-se-toolkit/se-toolkit-lab-7) |
 | 8 | The Agent is the Interface | [se-toolkit-lab-8](https://github.com/inno-se-toolkit/se-toolkit-lab-8) |
-| 9 | Hackathon | — |
+| 9 | Hackathon | [se-toolkit-lab-9](https://github.com/inno-se-toolkit/se-toolkit-lab-9) |
 | 10 | Demo Day | — |
 
 ### Section 1: SE Fundamentals and Development Tools
@@ -162,10 +162,10 @@ See [docs/Question bank.md](docs/Question%20bank.md) for the full list of quiz q
 
 For the retake, the student must:
 
-1. **Pass all labs** — complete all required tasks for Labs 1–8 via the autochecker bot
-2. **Pass the theory quiz** — answer at least 2 out of 3 questions correctly
-3. **Build and deploy a project** — as specified in the hackathon requirements (a working deployed service integrating backend, database, containerization, and at least one additional component)
-4. **Present the results** — demonstrate the deployed project with a short walkthrough
+1. **Pass all labs**
+2. **Pass the theory quiz**
+3. **Build and deploy a hackathon project**
+4. **Present the results**
 
 ## P.4 Grading
 
