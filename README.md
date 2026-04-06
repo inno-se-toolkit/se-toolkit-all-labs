@@ -64,14 +64,17 @@ By the end of the course, the students should be able to:
 
 The course is organized into 4 sections delivered across 10 weekly labs.
 
-| Section | Labs | Hours (practical) | Hours (self-study) |
-|---------|------|-------------------|--------------------|
-| 1. SE Fundamentals and Development Tools | Labs 1–2 | 10 | 6 |
-| 2. Backend Development and Testing | Labs 3–4 | 14 | 8 |
-| 3. Data, Containerization, and Service Integration | Labs 5–6 | 10 | 6 |
-| 4. Client Interfaces, Analytics, and AI Agents | Labs 7–8 | 6 | 4 |
-| Theory quiz + Hackathon | Labs 9–10 | 8 (exam) | — |
-| **Total** | | **40 + 8** | **24** |
+| | Labs | Hours |
+|---|---|---|
+| 1. SE Fundamentals and Development Tools | Labs 1–2 | 8 |
+| 2. Backend Development and Testing | Labs 3–4 | 8 |
+| 3. Data, Containerization, and Service Integration | Labs 5–6 | 8 |
+| 4. Client Interfaces, Analytics, and AI Agents | Labs 7–8 | 8 |
+| 5. Hackathon + Demo Day | Labs 9–10 | 8 |
+| **Labs total** | | **40** |
+| Self-study | | 24 |
+| Exam preparation | | 8 |
+| **Course total** | | **72** |
 
 ### Labs
 
@@ -85,8 +88,8 @@ The course is organized into 4 sections delivered across 10 weekly labs.
 | 6 | Build Your Own Agent | [se-toolkit-lab-6](https://github.com/inno-se-toolkit/se-toolkit-lab-6) |
 | 7 | Build a Client with an AI Coding Agent | [se-toolkit-lab-7](https://github.com/inno-se-toolkit/se-toolkit-lab-7) |
 | 8 | The Agent is the Interface | [se-toolkit-lab-8](https://github.com/inno-se-toolkit/se-toolkit-lab-8) |
-| 9 | Theory Quiz | — |
-| 10 | Hackathon Presentations | — |
+| 9 | Hackathon | — |
+| 10 | Demo Day | — |
 
 ### Section 1: SE Fundamentals and Development Tools
 
