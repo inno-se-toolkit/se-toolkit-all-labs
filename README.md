@@ -160,7 +160,12 @@ See [docs/Question bank.md](docs/Question%20bank.md) for the full list of quiz q
 
 ## P.3.3 The Retake Exam
 
-For the retake, the student must complete a written theory quiz (answering at least 2 out of 3 questions correctly) and demonstrate a working deployed project covering the core course topics (backend, database, containerization, deployment).
+For the retake, the student must:
+
+1. **Pass all labs** — complete all required tasks for Labs 1–8 via the autochecker bot
+2. **Pass the theory quiz** — answer at least 2 out of 3 questions correctly
+3. **Build and deploy a project** — as specified in the hackathon requirements (a working deployed service integrating backend, database, containerization, and at least one additional component)
+4. **Present the results** — demonstrate the deployed project with a short walkthrough
 
 ## P.4 Grading
 

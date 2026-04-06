@@ -2,23 +2,26 @@
 
 Calculate lab participation scores by combining **attendance** data with **autochecker task** data.
 
-## Scoring rules
+## Scoring Rules
 
-| Score | Rule |
-|-------|------|
-| **1** | attended AND obligatory_tasks_passed >= 2 |
-| **0.5** | attended AND obligatory_tasks_passed == 1 |
-| **0.5** | absent AND obligatory_tasks_passed >= 2 |
-| **0** | attended AND obligatory_tasks_passed == 0 |
-| **0** | absent AND obligatory_tasks_passed < 2 |
-| **0** | plagiarism detected, case to be filed to DoE |
-| *blank* | non-student (no group) |
+Per the [course syllabus](../../README.md#p42-participation-scoring), the following rules apply across all labs unless specified otherwise:
 
-## Input files
+| Condition | Points |
+|-----------|--------|
+| Attended + completed all required tasks | 1.0 |
+| Completed tasks without attendance | 0.5 |
+| Attended but tasks not completed | 0.0 |
+| Not attended, tasks not completed | 0.0 |
+| Plagiarism detected | 0.0 (case filed to DoE) |
+| Non-student (no group) | *skipped* |
+
+"Completed all required tasks" means all obligatory tasks passed at >=75% in the autochecker. The specific threshold per lab is defined in the lab instructions (e.g., for some labs task 3 requires >=66%).
+
+## Input Files
 
 ### Attendance CSVs (Moodle export)
 
-One file per lab group. Columns:
+One ZIP per week from Moodle, containing one CSV per lab group:
 
 ```
 External user field,status
@@ -28,42 +31,40 @@ a.student@innopolis.university,P
 - `External user field` — student email
 - `status` — `P` for present
 
-### Tasks CSV (autochecker export)
+### Autochecker CSV (dashboard export)
 
-Single file with autochecker results. Columns:
+Single file with autochecker results:
 
 ```
-github_alias,email,group,lab04_obligatory_passed
-StudentAlias,s.student@innopolis.university,B25-CSE-01,3
+github_alias,email,group,setup,task-1,task-2,task-3
+StudentAlias,s.student@innopolis.university,B25-CSE-01,100.0% (5/5),80.0% (4/5),,
 ```
-
-- `github_alias` — GitHub username
-- `email` — university email (used to join with attendance)
-- `group` — student group (empty = non-student, skipped)
-- `labXX_obligatory_passed` — count of obligatory tasks passed at >=75%
 
 ## Usage
 
 ```bash
 python scripts/participation/calculate.py \
-    --tasks data/tasks-lab03-lab04.csv \
-    --task-column lab04_obligatory_passed \
-    --attendance data/attendance/L4-G1.csv data/attendance/L4-G2.csv ... \
-    --output participation-lab04.csv \
-    --cheaters AleksKornilov07 venimu
+    --tasks /path/to/autochecker-lab-06-2026-03-21.csv \
+    --attendance /path/to/Week\ 6/*.csv \
+    --output participation-lab06.csv \
+    --cheaters alias1 alias2
 ```
 
 ## Output
 
-CSV with columns: `github_alias`, `email`, `group`, `<task-column>`, `attended`, `participation`, `comment`.
+CSV with columns: `email`, `group`, `score`, `comment`.
 
-Each row has a human-readable `comment` explaining how the score was derived.
+Each row has a concise comment (e.g., "attended, 3/3 tasks").
 
-## Procedure (step by step)
+## Procedure
 
-1. **Export attendance** — download per-group attendance CSVs from Moodle
-2. **Export tasks** — use the autochecker dashboard CSV export (`/export/csv?lab=lab-XX`) or the existing `participation-labXX.csv` file
-3. **Run plagiarism check** (if applicable) — `autochecker batch --plagiarism`, then manual investigation. Document confirmed cases in `autochecker/reports/`
-4. **Run the script** — pass attendance files, task file, task column, and any cheater aliases
-5. **Review output** — check the summary breakdown, inspect edge cases (0.5 scores, cheaters)
+1. **Export attendance** — download the Week N ZIP from Moodle, unzip
+2. **Export autochecker results** — download CSV from the autochecker dashboard
+3. **Run plagiarism check** (if applicable) — document confirmed cases in `autochecker/reports/`
+4. **Run the script** — pass attendance CSVs and autochecker CSV
+5. **Review output** — check summary, inspect edge cases (0.5 scores, cheaters)
 6. **Upload to Moodle** — use the output CSV for grade entry
+
+## Legal Excuses
+
+Students with a legal excuse get a deadline extension. The extension equals the number of excused days counted from the lab day. Legal excuse info is collected from DoE when finalizing the course.
