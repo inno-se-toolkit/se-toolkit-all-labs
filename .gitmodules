@@ -1,25 +1,3 @@
-[submodule "lab-01-market-product-and-git"]
-	path = lab-01-market-product-and-git
-	url = https://github.com/inno-se-toolkit/lab-01-market-product-and-git
-	branch = main
-[submodule "lab-06-telegram-bot"]
-	path = lab-06-telegram-bot
-	url = https://github.com/nurlingo/lab-06-telegram-bot
-[submodule "lab-07-data-and-web"]
-	path = lab-07-data-and-web
-	url = https://github.com/nurlingo/lab-07-data-and-web
-[submodule "lab-08-ml-recommender"]
-	path = lab-08-ml-recommender
-	url = https://github.com/nurlingo/lab-08-ml-recommender
-[submodule "lab-09-flutter-app"]
-	path = lab-09-flutter-app
-	url = https://github.com/nurlingo/lab-09-flutter-app
-[submodule "lab-10-hackathon"]
-	path = lab-10-hackathon
-	url = https://github.com/nurlingo/lab-10-hackathon
-[submodule "lab-05-ai-integration"]
-	path = lab-05-ai-integration
-	url = https://github.com/nurlingo/lab-05-ai-integration
 [submodule "autochecker"]
 	path = autochecker
 	url = https://github.com/inno-se-toolkit/autochecker.git
@@ -48,3 +26,6 @@
 [submodule "se-toolkit-lab-9"]
 	path = se-toolkit-lab-9
 	url = https://github.com/inno-se-toolkit/se-toolkit-lab-9.git
+[submodule "se-toolkit-lab-1"]
+	path = se-toolkit-lab-1
+	url = https://github.com/inno-se-toolkit/lab-01-market-product-and-git
