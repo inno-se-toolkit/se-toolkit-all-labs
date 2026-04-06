@@ -10,12 +10,11 @@ Usage:
         --output participation-lab05.csv \
         [--cheaters AleksKornilov07 venimu]
 
-Scoring rules:
+Scoring rules (per course syllabus):
     1    = attended AND all required tasks >= threshold
-    0.5  = attended AND some (but not all) required tasks >= threshold
     0.5  = absent   AND all required tasks >= threshold
-    0    = attended AND no required tasks >= threshold
-    0    = absent   AND not all required tasks >= threshold
+    0    = attended but tasks not completed
+    0    = absent and tasks not completed
     0    = flagged as cheater
     ""   = non-student (no group in the tasks file)
 
@@ -95,28 +94,21 @@ def calculate_participation(
 
         att = "YES" if attended else "NO"
 
+        att_str = "attended" if attended else "not attended"
+
         if not group:
             part, comment = "", "non-student"
         elif alias in cheater_set:
             part, comment = "0", "plagiarism detected"
-        elif attended and tasks_passed >= required_count:
+        elif tasks_passed >= required_count and attended:
             part = "1"
-            comment = f"attended + {tasks_passed}/{required_count} tasks passed"
-        elif attended and tasks_passed >= 1:
+            comment = f"attended, {tasks_passed}/{required_count} tasks"
+        elif tasks_passed >= required_count and not attended:
             part = "0.5"
-            comment = f"attended but only {tasks_passed}/{required_count} tasks passed"
-        elif not attended and tasks_passed >= required_count:
-            part = "0.5"
-            comment = f"absent but {tasks_passed}/{required_count} tasks passed"
-        elif attended and tasks_passed == 0:
-            part = "0"
-            comment = f"attended but 0/{required_count} tasks passed"
-        elif not attended and tasks_passed >= 1:
-            part = "0"
-            comment = f"absent + only {tasks_passed}/{required_count} tasks passed"
+            comment = f"not attended, {tasks_passed}/{required_count} tasks"
         else:
             part = "0"
-            comment = f"absent + 0/{required_count} tasks passed"
+            comment = f"{att_str}, {tasks_passed}/{required_count} tasks"
 
         out_row = {
             "github_alias": alias,
