@@ -168,12 +168,15 @@ For the retake, the student must complete a written theory quiz (answering at le
 
 This is a **pass/fail** course. There are no letter grades.
 
-- **Pass:** accumulate 9 participation points (out of 10 labs) AND attend and present at Lab 10 (hackathon).
-- **Fail:** fewer than 9 participation points or did not present at Lab 10.
+**How to pass:**
+- Accumulate **9 participation points** total (out of 10 labs), AND
+- Attend and present at **Lab 10 (Demo Day)**
 
 ### P.4.2 Participation Scoring
 
-Each lab (Labs 1–10) is worth up to 1 participation point:
+The following rules apply across all labs, unless specified otherwise.
+
+Participation means **attending** and **completing all required tasks**.
 
 | Condition | Points |
 |-----------|--------|
@@ -182,9 +185,17 @@ Each lab (Labs 1–10) is worth up to 1 participation point:
 | Did not complete required tasks | 0.0 |
 
 - Required tasks are submitted via the autochecker bot ([@auchebot](https://t.me/auchebot))
-- Deadline: Thursday 23:59 following the lab
+- Deadline: **Thursday 23:59** following the lab
 
-### P.4.3 Recommendations for Students
+### P.4.3 Legal Excuses
+
+Students with a legal excuse receive a deadline extension to submit in [@auchebot](https://t.me/auchebot).
+
+The extension length equals the number of excused days, counted starting from the lab day. For example, if you have a legal excuse from Thursday to Tuesday and your lab is on Saturday, you get an extension of four days (Saturday to Tuesday).
+
+Legal excuse information is collected from the Dean's Office (DoE) when finalizing the course.
+
+### P.4.4 Recommendations for Students
 
 1. Complete each lab on time. Labs build on each other — falling behind makes later labs harder.
 2. Use the autochecker bot to verify your work before the deadline.
